@@ -1,0 +1,171 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Gyroown.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Gyroown.Controls"
+    xmlns:views="using:Gyroown.Views"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid>
+        <!-- Vault content -->
+        <Grid x:Name="VaultContent" Visibility="Collapsed" RowDefinitions="Auto,Auto,*,Auto">
+            <controls:TitleBarControl Grid.Row="0" x:Name="TitleBar" />
+
+            <CommandBar Grid.Row="1" x:Name="ToolBar" DefaultLabelPosition="Right" Margin="-8,0">
+                <AppBarButton x:Name="BtnNewFolder" Click="OnNewFolderCmd">
+                    <AppBarButton.Icon><FontIcon Glyph="&#xE8A6;"/></AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton x:Name="BtnImport" Click="OnImportCmd">
+                    <AppBarButton.Icon><FontIcon Glyph="&#xE8B5;"/></AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton x:Name="BtnExport" Click="OnExportCmd">
+                    <AppBarButton.Icon><FontIcon Glyph="&#xEDE1;"/></AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton x:Name="BtnMoveIn" Click="OnMoveInCmd">
+                    <AppBarButton.Icon><FontIcon Glyph="&#xE77B;"/></AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton x:Name="BtnMoveOut" Click="OnMoveOutCmd">
+                    <AppBarButton.Icon><FontIcon Glyph="&#xE77C;"/></AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarSeparator />
+                <AppBarButton x:Name="BtnDelete" Click="OnDeleteCmd">
+                    <AppBarButton.Icon><FontIcon Glyph="&#xE74D;"/></AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton x:Name="BtnSettings" Click="OnSettingsCmd">
+                    <AppBarButton.Icon><FontIcon Glyph="&#xE713;"/></AppBarButton.Icon>
+                </AppBarButton>
+                <CommandBar.SecondaryCommands>
+                    <AppBarButton x:Name="BtnLock" Click="OnLockCmd">
+                        <AppBarButton.Icon><FontIcon Glyph="&#xE72E;"/></AppBarButton.Icon>
+                    </AppBarButton>
+                </CommandBar.SecondaryCommands>
+            </CommandBar>
+
+            <Grid Grid.Row="2" ColumnDefinitions="Auto,*">
+                <Border Grid.Column="0" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,1,0">
+                    <controls:VaultSidebar x:Name="Sidebar" />
+                </Border>
+                <controls:VaultFileListView Grid.Column="1" x:Name="FileList"
+                    DragOutRequested="OnDragOut" DropInRequested="OnDropIn" />
+            </Grid>
+
+            <controls:VaultStatusBar Grid.Row="3" x:Name="StatusBar" />
+        </Grid>
+
+        <!-- Auth overlay -->
+        <Grid x:Name="AuthOverlay" Visibility="Visible" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <Border x:Name="AuthCard" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    CornerRadius="12" Padding="32,28" MinWidth="400"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                <ContentControl x:Name="AuthHost" />
+            </Border>
+        </Grid>
+
+        <!-- Settings panel -->
+        <Grid x:Name="SettingsPanel" Visibility="Collapsed" HorizontalAlignment="Right" Width="380">
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1,0,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Spacing="16" Padding="24">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock x:Name="SettingsTitle" Style="{StaticResource SubtitleTextBlockStyle}" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" x:Name="SettingsCloseBtn" Click="OnSettingsClose" Padding="8,4">
+                                <FontIcon Glyph="&#xE8BB;" FontSize="12" />
+                            </Button>
+                        </Grid>
+
+                        <!-- Theme mode -->
+                        <StackPanel Spacing="6">
+                            <TextBlock x:Name="ThemeLabel" FontWeight="SemiBold" />
+                            <ComboBox x:Name="ThemeCombo" SelectionChanged="OnThemeSel" />
+                        </StackPanel>
+
+                        <!-- Accent colors -->
+                        <StackPanel Spacing="8">
+                            <TextBlock x:Name="AccentLabel" FontWeight="SemiBold" />
+                            <StackPanel x:Name="AccentList" Orientation="Horizontal" Spacing="6" />
+                        </StackPanel>
+
+                        <!-- Chunk config -->
+                        <StackPanel Spacing="6">
+                            <TextBlock x:Name="ChunkLabel" FontWeight="SemiBold" />
+                            <Slider x:Name="ChunkSlider" Minimum="1" Maximum="6" StepFrequency="1"
+                                    TickFrequency="1" TickPlacement="BottomRight" ValueChanged="OnChunkChanged" />
+                            <TextBlock x:Name="ChunkValue" Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                        </StackPanel>
+
+                        <!-- Language -->
+                        <StackPanel Spacing="6">
+                            <TextBlock x:Name="LangLabel" FontWeight="SemiBold" />
+                            <ComboBox x:Name="LangCombo" SelectionChanged="OnLangSel">
+                                <ComboBoxItem Tag="zh-CN" Content="简体中文" />
+                                <ComboBoxItem Tag="en-US" Content="English" />
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!-- Change password -->
+                        <StackPanel Spacing="6">
+                            <TextBlock x:Name="PwLabel" FontWeight="SemiBold" />
+                            <Button x:Name="ChangePwBtn" Click="OnChangePw" HorizontalAlignment="Left" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="6">
+                            <TextBlock x:Name="VaultLabel" FontWeight="SemiBold" />
+                            <TextBlock x:Name="VaultPathText" TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock x:Name="AboutLabel" FontWeight="SemiBold" />
+                            <TextBlock x:Name="AboutText" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextWrapping="Wrap" />
+                            <TextBlock x:Name="VersionText" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <HyperlinkButton x:Name="GitHubLink" NavigateUri="https://github.com/JularDepick/Gyroown"
+                                             FontSize="12" Margin="0,4,0,0" />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+        <!-- Progress overlay -->
+        <Grid x:Name="ProgressOverlay" Visibility="Collapsed" VerticalAlignment="Bottom" Margin="0,0,0,40">
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Padding="16"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"
+                    HorizontalAlignment="Center" MinWidth="360">
+                <StackPanel Spacing="8">
+                    <TextBlock x:Name="ProgressTitle" FontWeight="SemiBold" />
+                    <ProgressBar x:Name="ProgressBar" Height="6" />
+                    <TextBlock x:Name="ProgressDetail" Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                </StackPanel>
+            </Border>
+        </Grid>
+        <!-- Success banner -->
+        <Grid x:Name="SuccessBanner" Visibility="Collapsed" VerticalAlignment="Bottom" Height="36"
+              Background="#10893E" Padding="12,0">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" x:Name="SuccessBannerText" Foreground="White" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <Button Grid.Column="1" Foreground="White" Background="Transparent" Click="OnSuccessBannerClose" Padding="4,2">
+                    <FontIcon Glyph="&#xE8BB;" FontSize="10" />
+                </Button>
+            </Grid>
+        </Grid>
+
+        <!-- Error banner -->
+        <Grid x:Name="ErrorBanner" Visibility="Collapsed" VerticalAlignment="Bottom" Height="36"
+              Background="#D13438" Padding="12,0">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+                <TextBlock Grid.Column="0" x:Name="ErrorBannerText" Foreground="White" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" PointerPressed="OnErrorBannerClick" />
+                <Button Grid.Column="1" x:Name="ErrorBannerViewBtn" Foreground="White" Background="Transparent"
+                        Click="OnErrorBannerClickBtn" Padding="8,2" Margin="8,0,0,0" />
+                <Button Grid.Column="2" Foreground="White" Background="Transparent"
+                        Click="OnErrorBannerClose" Padding="4,2">
+                    <FontIcon Glyph="&#xE8BB;" FontSize="10" />
+                </Button>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

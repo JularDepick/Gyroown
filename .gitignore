@@ -1,0 +1,49 @@
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+ARM64/
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+*.wapproj.user
+
+# Visual Studio Code
+.vscode/
+
+# NuGet
+*.nupkg
+*.nuget.*.props
+*.nuget.*.targets
+*.nuget.cache
+*.assets.cache
+project.assets.json
+
+# .NET
+*.AssemblyInfo.cs
+
+# Build output (generated)
+*.log
+*.etl
+build.log
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary
+*.tmp
+*.swp
+*~
+
+# Reasonix
+.reasonix/

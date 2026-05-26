@@ -1,0 +1,79 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Gyroown.Controls.VaultFileListView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid RowDefinitions="Auto,Auto,*">
+        <!-- View toggle bar -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="4" Padding="8,4"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <ToggleButton x:Name="DetailsBtn" Width="36" Height="28" IsChecked="True" Click="OnViewChanged" Tag="details"
+                          ToolTipService.ToolTip="Details"><FontIcon Glyph="&#xE8A1;" FontSize="14"/></ToggleButton>
+            <ToggleButton x:Name="IconsBtn" Width="36" Height="28" Click="OnViewChanged" Tag="icons"
+                          ToolTipService.ToolTip="Icons"><FontIcon Glyph="&#xE838;" FontSize="14"/></ToggleButton>
+            <ToggleButton x:Name="TilesBtn" Width="36" Height="28" Click="OnViewChanged" Tag="tiles"
+                          ToolTipService.ToolTip="Tiles"><FontIcon Glyph="&#xE8A9;" FontSize="14"/></ToggleButton>
+        </StackPanel>
+
+        <!-- Column headers with draggable splitters -->
+        <Grid x:Name="HeaderRow" Grid.Row="1"
+              ColumnDefinitions="24,2*,4,1*,4,1*,4,1*"
+              Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,0,1"
+              Padding="8,0">
+            <Button Grid.Column="1" x:Name="SortName" Click="SortByName"
+                    Style="{StaticResource TextBlockButtonStyle}" HorizontalAlignment="Stretch" Margin="4,4,0,4" />
+            <Border Grid.Column="2" x:Name="Split1" Background="Transparent"
+                    PointerPressed="OnSplitterPressed" PointerMoved="OnSplitterMoved" PointerReleased="OnSplitterReleased" />
+            <Button Grid.Column="3" x:Name="SortSize" Click="SortBySize"
+                    Style="{StaticResource TextBlockButtonStyle}" HorizontalAlignment="Stretch" Margin="4" MinWidth="60" />
+            <Border Grid.Column="4" x:Name="Split2" Background="Transparent"
+                    PointerPressed="OnSplitterPressed" PointerMoved="OnSplitterMoved" PointerReleased="OnSplitterReleased" />
+            <Button Grid.Column="5" x:Name="SortType" Click="SortByType"
+                    Style="{StaticResource TextBlockButtonStyle}" HorizontalAlignment="Stretch" Margin="4" MinWidth="60" />
+            <Border Grid.Column="6" x:Name="Split3" Background="Transparent"
+                    PointerPressed="OnSplitterPressed" PointerMoved="OnSplitterMoved" PointerReleased="OnSplitterReleased" />
+            <Button Grid.Column="7" x:Name="SortDate" Click="SortByDate"
+                    Style="{StaticResource TextBlockButtonStyle}" HorizontalAlignment="Stretch" Margin="4" MinWidth="80" />
+        </Grid>
+
+        <!-- Details view -->
+        <ListView Grid.Row="2" x:Name="FileList" SelectionMode="Extended"
+                  AllowDrop="True" CanDragItems="True"
+                  DragItemsStarting="OnDragStart" DragOver="OnDragOver" Drop="OnDrop"
+                  DoubleTapped="OnDoubleTap" KeyDown="OnListKeyDown">
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Padding="8,4" RightTapped="OnItemRightTap">
+                        <FontIcon Grid.Column="0" Glyph="&#xE8A5;" FontSize="16" Margin="0,0,8,0" />
+                        <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="2" Text="{Binding FormattedSize}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" Margin="12,0" />
+                        <TextBlock Grid.Column="3" Text="{Binding ContentType}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" Margin="12,0" />
+                        <TextBlock Grid.Column="4" Text="{Binding ModifiedAt}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <!-- Icons/Tiles view -->
+        <GridView Grid.Row="2" x:Name="FileGrid" SelectionMode="Extended"
+                  AllowDrop="True" CanDragItems="True" Visibility="Collapsed"
+                  DragItemsStarting="OnDragStart" DragOver="OnDragOver" Drop="OnDrop"
+                  DoubleTapped="OnDoubleTap" KeyDown="OnListKeyDown">
+            <GridView.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Width="100" Spacing="4" Padding="8" RightTapped="OnItemRightTap">
+                        <Border Width="60" Height="60" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="4">
+                            <Image Source="{Binding PreviewImage}" Stretch="Uniform" MaxWidth="56" MaxHeight="56" />
+                        </Border>
+                        <TextBlock Text="{Binding Name}" Style="{StaticResource CaptionTextBlockStyle}" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="90" />
+                    </StackPanel>
+                </DataTemplate>
+            </GridView.ItemTemplate>
+        </GridView>
+    </Grid>
+</UserControl>
