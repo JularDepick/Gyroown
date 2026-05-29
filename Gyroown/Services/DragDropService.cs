@@ -2,9 +2,8 @@
 
 /// <summary>
 /// Drag-drop service.
-/// Drag-in (drop into vault): encrypts &amp; imports files. Uses in-memory streams only.
-/// Drag-out: DISABLED for security — decrypting to temp files would leak plaintext to disk.
-/// Use Move Out or Export (user-chosen destination) instead.
+/// Drag-in (drop into vault): encrypts &amp; imports files.
+/// Drag-out: handled directly in VaultFileListView via DecryptToFile callback.
 /// </summary>
 public class DragDropService : IDragDropService
 {
@@ -15,13 +14,25 @@ public class DragDropService : IDragDropService
     public async Task HandleDropInAsync(IReadOnlyList<string> filePaths,
         IProgress<double>? progress = null, CancellationToken ct = default)
     {
+        var errors = new List<string>();
         for (int i = 0; i < filePaths.Count; i++)
         {
+            ct.ThrowIfCancellationRequested();
             var path = filePaths[i];
-            await using var fs = File.OpenRead(path);
-            await _vault.ImportItemAsync(fs, Path.GetFileName(path), "/", progress, ct);
+            try
+            {
+                await using var fs = File.OpenRead(path);
+                await _vault.ImportItemAsync(fs, Path.GetFileName(path), "/", progress, ct);
+            }
+            catch (Exception ex)
+            {
+                LogService.Warn($"HandleDropInAsync: failed to import '{path}': {ex.Message}");
+                errors.Add(path);
+            }
             progress?.Report((double)(i + 1) / filePaths.Count);
         }
+        if (errors.Count > 0)
+            LogService.Warn($"HandleDropInAsync: {errors.Count}/{filePaths.Count} files failed to import");
     }
 
     /// <summary>

@@ -18,7 +18,9 @@ public sealed partial class PicturePasswordControl : UserControl, IPasswordContr
     public PicturePasswordControl()
     {
         InitializeComponent();
-        Loc.LanguageChanged += (_, _) => ApplyLocalization();
+        var handler = (EventHandler)((_, _) => ApplyLocalization());
+        Loc.LanguageChanged += handler;
+        Unloaded += (_, _) => Loc.LanguageChanged -= handler;
         ApplyLocalization();
     }
 
@@ -53,7 +55,8 @@ public sealed partial class PicturePasswordControl : UserControl, IPasswordContr
     private void Draw(double rx, double ry, int n)
     {
         var w = Container.ActualWidth; var h = Container.ActualHeight;
-        var e = new Ellipse { Width = R * 2, Height = R * 2, Fill = new SolidColorBrush(Colors.SteelBlue), Opacity = 0.85 };
+        var accent = (SolidColorBrush)Application.Current.Resources["AccentFillColorDefaultBrush"];
+        var e = new Ellipse { Width = R * 2, Height = R * 2, Fill = accent, Opacity = 0.85 };
         Canvas.SetLeft(e, rx * w - R); Canvas.SetTop(e, ry * h - R);
         MarkCanvas.Children.Add(e);
         var t = new TextBlock { Text = n.ToString(), Foreground = new SolidColorBrush(Colors.White), FontWeight = Microsoft.UI.Text.FontWeights.Bold, FontSize = 13, Width = R * 2, Height = R * 2, TextAlignment = TextAlignment.Center, HorizontalTextAlignment = TextAlignment.Center };
@@ -73,9 +76,28 @@ public sealed partial class PicturePasswordControl : UserControl, IPasswordContr
         picker.FileTypeFilter.Add(".png");
         picker.FileTypeFilter.Add(".bmp");
         var file = await picker.PickSingleFileAsync();
-        if (file != null) LoadImage(file.Path);
+        if (file != null)
+        {
+            var bytes = await File.ReadAllBytesAsync(file.Path);
+            ImageProtection.SaveImage(bytes);
+            LoadImage(file.Path);
+        }
     }
+
+    /// <summary>Load the stored encrypted image for the unlock screen.</summary>
+    public async Task LoadStoredImageAsync()
+    {
+        var data = ImageProtection.LoadImage();
+        if (data == null) return;
+        var bmp = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
+        var ms = new MemoryStream(data);
+        await bmp.SetSourceAsync(ms.AsRandomAccessStream());
+        Image.Source = bmp;
+    }
+
+    public static bool HasStoredImage => ImageProtection.HasStoredImage;
 
     public object GetCredential() => _pts.ToArray();
     public void Clear() { _pts.Clear(); MarkCanvas.Children.Clear(); CountText.Text = Loc.Format("PictureControl", "Count", 0, 3); }
+    public void FocusInput() => Focus(FocusState.Programmatic);
 }

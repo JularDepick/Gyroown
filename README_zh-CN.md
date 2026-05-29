@@ -73,8 +73,6 @@ Gyroown/
 │   ├── Loc                         # 静态本地化辅助类
 │   └── ILocalizationService        # 语言包接口
 └── Gyroown.csproj                  # .NET 8 + WinUI 3
-
-Gyroown (Package)/                  # MSIX 打包
 ```
 
 ### 技术栈
@@ -85,7 +83,7 @@ Gyroown (Package)/                  # MSIX 打包
 | 语言 | C# 12, XAML |
 | 运行时 | .NET 8 |
 | 加密 | RSA 2048, AES-256-GCM, PBKDF2-SHA256 |
-| 打包 | MSIX |
+| 打包 | Unpackaged（独立 .exe） |
 | 最低系统 | Windows 10 1809 (build 17763) |
 
 ### 架构

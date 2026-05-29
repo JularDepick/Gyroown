@@ -1,8 +1,9 @@
 ﻿namespace Gyroown.Services;
 
 /// <summary>
-/// Drag-drop service interface.
-/// Core logic reserved (stub).
+/// Drag-and-drop service interface.
+/// Drop-in: encrypt and import files into the vault (memory-stream only).
+/// Drag-out: disabled by security policy (no decryption to temp files); use the export function instead.
 /// </summary>
 public interface IDragDropService
 {

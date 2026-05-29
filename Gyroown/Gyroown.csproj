@@ -8,7 +8,8 @@
     <Platforms>x86;x64;ARM64</Platforms>
     <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
     <UseWinUI>true</UseWinUI>
-    <WinUISDKReferences>false</WinUISDKReferences>
+    <WinUISDKReferences>true</WinUISDKReferences>
+    <WindowsPackageType>None</WindowsPackageType>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon>..\favicon.ico</ApplicationIcon>
@@ -32,6 +33,12 @@
     <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
     <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Embedded translations (always available in DLL, no external file needed) -->
+    <EmbeddedResource Include="Resources\Loc\zh-CN.ini" />
+    <EmbeddedResource Include="Resources\Loc\en-US.ini" />
+  </ItemGroup>
 
   <ItemGroup>
     <Content Include="lang\*.ini">

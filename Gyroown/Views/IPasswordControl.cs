@@ -1,17 +1,21 @@
 ﻿namespace Gyroown.Views;
 
 /// <summary>
-/// (stub) — (stub)
-/// 供 UnlockWindow / PasswordSetupWindow (stub)
+/// Unified password input control interface — abstracts input interaction for different password types.
+/// Used by UnlockWindow / PasswordSetupWindow, implemented by PinPasswordControl,
+/// GesturePasswordControl, CustomPasswordControl, PicturePasswordControl.
 /// </summary>
 public interface IPasswordControl
 {
-    /// <summary>(stub)</summary>
+    /// <summary>Get the user-entered credential object (string/int[]/coordinate array, depending on password type).</summary>
     object GetCredential();
 
-    /// <summary>(stub)</summary>
+    /// <summary>Clear the input state in the control.</summary>
     void Clear();
 
-    /// <summary>(stub)</summary>
+    /// <summary>Focus the primary input element.</summary>
+    void FocusInput();
+
+    /// <summary>Fired when the user completes input (clicks confirm).</summary>
     event EventHandler? Validated;
 }

@@ -13,12 +13,20 @@
         Padding="12,0"
         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
 
-        <TextBlock
-            Grid.Column="0"
-            x:Name="ItemCountText"
-            Text="0 items"
-            Style="{StaticResource CaptionTextBlockStyle}"
-            VerticalAlignment="Center" />
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <TextBlock
+                x:Name="ItemCountText"
+                Text=""
+                Style="{StaticResource CaptionTextBlockStyle}"
+                VerticalAlignment="Center" />
+            <TextBlock
+                x:Name="SelectionInfoText"
+                Text=""
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                VerticalAlignment="Center"
+                Visibility="Collapsed" />
+        </StackPanel>
 
         <TextBlock
             Grid.Column="1"
@@ -41,7 +49,7 @@
                 Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
             <TextBlock
                 x:Name="LockStatusText"
-                Text="Encrypted"
+                Text=""
                 Style="{StaticResource CaptionTextBlockStyle}"
                 Foreground="{ThemeResource AccentFillColorDefaultBrush}"
                 VerticalAlignment="Center" />

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Gyroown.Controls.Preview.TextPreviewControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- Toolbar -->
+        <Grid Grid.Row="0" Padding="8,4"
+              Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,0,1"
+              ColumnDefinitions="Auto,Auto,8,Auto,Auto,8,Auto,Auto">
+            <TextBlock Grid.Column="0" x:Name="EncodingLabel" VerticalAlignment="Center" Margin="0,0,6,0" FontSize="12"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <ComboBox Grid.Column="1" x:Name="EncodingCombo" MinWidth="100" SelectionChanged="OnEncodingChanged" FontSize="12" />
+            <ToggleButton Grid.Column="3" x:Name="WrapToggle" Checked="OnWrapToggled" Unchecked="OnWrapToggled"
+                          IsChecked="True" Height="28" Padding="8,0" FontSize="12">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <FontIcon Glyph="&#xE73B;" FontSize="13" />
+                    <TextBlock x:Name="WrapLabel" VerticalAlignment="Center" FontSize="11" />
+                </StackPanel>
+            </ToggleButton>
+            <TextBlock Grid.Column="5" x:Name="LineColInfo" VerticalAlignment="Center" FontSize="11"
+                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            <TextBlock Grid.Column="7" x:Name="LangLabel" VerticalAlignment="Center" FontSize="11"
+                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+        </Grid>
+
+        <!-- Text content area with line numbers -->
+        <ScrollViewer Grid.Row="1" x:Name="TextScroller"
+                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      Padding="0">
+            <Grid ColumnDefinitions="Auto,1,*,8">
+                <!-- Line numbers -->
+                <StackPanel x:Name="LineNumbers" Grid.Column="0"
+                            Padding="8,8,12,8"
+                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                            VerticalAlignment="Top" />
+                <!-- Separator -->
+                <Border Grid.Column="1" Width="1"
+                        Background="{ThemeResource CardStrokeColorDefaultBrush}"
+                        VerticalAlignment="Stretch" />
+                <!-- Code content -->
+                <ScrollViewer Grid.Column="2" x:Name="CodeScroller"
+                              HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                              Padding="12,8,12,8">
+                    <TextBlock x:Name="CodeContent"
+                               FontFamily="Cascadia Code, Consolas, Courier New, monospace"
+                               FontSize="13" LineHeight="20"
+                               TextWrapping="Wrap" />
+                </ScrollViewer>
+            </Grid>
+        </ScrollViewer>
+
+        <!-- Status bar -->
+        <Grid Grid.Row="2" Padding="8,3"
+              Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
+            <TextBlock x:Name="StatusText" FontSize="11"
+                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+        </Grid>
+    </Grid>
+</UserControl>

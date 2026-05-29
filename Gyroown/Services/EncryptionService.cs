@@ -38,7 +38,7 @@ public class EncryptionService : IEncryptionService
         var hdr = new BlobHeader { AesKey = Convert.ToBase64String(aesKey), AesNonce = Convert.ToBase64String(aesNonce), OriginalLength = plainData.Length };
         var hdrJson = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(hdr, JsonConfig.Options));
         var hdrEnc = rsa.Encrypt(hdrJson, RSAEncryptionPadding.OaepSHA256);
-        // Write
+        // Write: [4B headerLen][header][4B bodyLen][body]
         var result = new byte[4 + hdrEnc.Length + 4 + cipher.Length];
         BitConverter.GetBytes(hdrEnc.Length).CopyTo(result, 0);
         hdrEnc.CopyTo(result, 4);
@@ -49,13 +49,22 @@ public class EncryptionService : IEncryptionService
 
     public byte[] DecryptBlob(byte[] encryptedBlob, byte[] privateKey)
     {
+        if (encryptedBlob.Length < 8)
+            throw new CryptographicException("Corrupted encrypted blob");
+
         using var rsa = RSA.Create(RsaKeySize); rsa.ImportRSAPrivateKey(privateKey, out _);
         var hdrLen = BitConverter.ToInt32(encryptedBlob, 0);
+        if (hdrLen < 0 || hdrLen > encryptedBlob.Length - 8)
+            throw new CryptographicException("Corrupted encrypted blob");
         var hdrEnc = encryptedBlob[4..(4 + hdrLen)];
         var bodyLen = BitConverter.ToInt32(encryptedBlob, 4 + hdrLen);
+        if (bodyLen < 0 || bodyLen > encryptedBlob.Length - 8 - hdrLen)
+            throw new CryptographicException("Corrupted encrypted blob");
         var cipher = encryptedBlob[(8 + hdrLen)..(8 + hdrLen + bodyLen)];
         // RSA decrypt header
-        var hdr = JsonSerializer.Deserialize<BlobHeader>(Encoding.UTF8.GetString(rsa.Decrypt(hdrEnc, RSAEncryptionPadding.OaepSHA256)))!;
+        var hdrJson = Encoding.UTF8.GetString(rsa.Decrypt(hdrEnc, RSAEncryptionPadding.OaepSHA256));
+        var hdr = JsonSerializer.Deserialize<BlobHeader>(hdrJson, JsonConfig.Options)
+            ?? throw new CryptographicException("Corrupted encrypted blob: invalid header JSON");
         var aesKey = Convert.FromBase64String(hdr.AesKey);
         var aesNonce = Convert.FromBase64String(hdr.AesNonce);
         // AES-GCM decrypt

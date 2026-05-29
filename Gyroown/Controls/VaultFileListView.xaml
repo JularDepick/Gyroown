@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <UserControl
     x:Class="Gyroown.Controls.VaultFileListView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -7,37 +7,52 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid RowDefinitions="Auto,Auto,*">
+    <UserControl.Resources>
+        <Style x:Key="TextBlockButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
         <!-- View toggle bar -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="4" Padding="8,4"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-            <ToggleButton x:Name="DetailsBtn" Width="36" Height="28" IsChecked="True" Click="OnViewChanged" Tag="details"
-                          ToolTipService.ToolTip="Details"><FontIcon Glyph="&#xE8A1;" FontSize="14"/></ToggleButton>
-            <ToggleButton x:Name="IconsBtn" Width="36" Height="28" Click="OnViewChanged" Tag="icons"
-                          ToolTipService.ToolTip="Icons"><FontIcon Glyph="&#xE838;" FontSize="14"/></ToggleButton>
-            <ToggleButton x:Name="TilesBtn" Width="36" Height="28" Click="OnViewChanged" Tag="tiles"
-                          ToolTipService.ToolTip="Tiles"><FontIcon Glyph="&#xE8A9;" FontSize="14"/></ToggleButton>
+            <ToggleButton x:Name="DetailsBtn" Width="32" Height="28" IsChecked="True" Click="OnViewChanged" Tag="details"
+                          AutomationProperties.Name="Details View"><FontIcon Glyph="&#xE8A1;" FontSize="14"/></ToggleButton>
+            <ToggleButton x:Name="IconsBtn" Width="32" Height="28" Click="OnViewChanged" Tag="icons"
+                          AutomationProperties.Name="Icons View"><FontIcon Glyph="&#xE838;" FontSize="14"/></ToggleButton>
+            <ToggleButton x:Name="TilesBtn" Width="32" Height="28" Click="OnViewChanged" Tag="tiles"
+                          AutomationProperties.Name="Tiles View"><FontIcon Glyph="&#xE8A9;" FontSize="14"/></ToggleButton>
         </StackPanel>
 
         <!-- Column headers with draggable splitters -->
         <Grid x:Name="HeaderRow" Grid.Row="1"
-              ColumnDefinitions="24,2*,4,1*,4,1*,4,1*"
+              ColumnDefinitions="24,Auto,2*,4,1*,4,1*,4,1*"
               Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
               BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,0,1"
               Padding="8,0">
-            <Button Grid.Column="1" x:Name="SortName" Click="SortByName"
+            <Border Grid.Column="1" Width="24" />
+            <Button Grid.Column="2" x:Name="SortName" Click="SortByName"
                     Style="{StaticResource TextBlockButtonStyle}" HorizontalAlignment="Stretch" Margin="4,4,0,4" />
-            <Border Grid.Column="2" x:Name="Split1" Background="Transparent"
+            <Border Grid.Column="3" x:Name="Split1" Background="Transparent"
                     PointerPressed="OnSplitterPressed" PointerMoved="OnSplitterMoved" PointerReleased="OnSplitterReleased" />
-            <Button Grid.Column="3" x:Name="SortSize" Click="SortBySize"
+            <Button Grid.Column="4" x:Name="SortSize" Click="SortBySize"
                     Style="{StaticResource TextBlockButtonStyle}" HorizontalAlignment="Stretch" Margin="4" MinWidth="60" />
-            <Border Grid.Column="4" x:Name="Split2" Background="Transparent"
+            <Border Grid.Column="5" x:Name="Split2" Background="Transparent"
                     PointerPressed="OnSplitterPressed" PointerMoved="OnSplitterMoved" PointerReleased="OnSplitterReleased" />
-            <Button Grid.Column="5" x:Name="SortType" Click="SortByType"
+            <Button Grid.Column="6" x:Name="SortType" Click="SortByType"
                     Style="{StaticResource TextBlockButtonStyle}" HorizontalAlignment="Stretch" Margin="4" MinWidth="60" />
-            <Border Grid.Column="6" x:Name="Split3" Background="Transparent"
+            <Border Grid.Column="7" x:Name="Split3" Background="Transparent"
                     PointerPressed="OnSplitterPressed" PointerMoved="OnSplitterMoved" PointerReleased="OnSplitterReleased" />
-            <Button Grid.Column="7" x:Name="SortDate" Click="SortByDate"
+            <Button Grid.Column="8" x:Name="SortDate" Click="SortByDate"
                     Style="{StaticResource TextBlockButtonStyle}" HorizontalAlignment="Stretch" Margin="4" MinWidth="80" />
         </Grid>
 
@@ -45,11 +60,13 @@
         <ListView Grid.Row="2" x:Name="FileList" SelectionMode="Extended"
                   AllowDrop="True" CanDragItems="True"
                   DragItemsStarting="OnDragStart" DragOver="OnDragOver" Drop="OnDrop"
-                  DoubleTapped="OnDoubleTap" KeyDown="OnListKeyDown">
+                  DoubleTapped="OnDoubleTap" Tapped="OnEmptyTap" KeyDown="OnListKeyDown"
+                  SelectionChanged="OnSelectionChanged"
+                  >
             <ListView.ItemTemplate>
                 <DataTemplate>
-                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Padding="8,4" RightTapped="OnItemRightTap">
-                        <FontIcon Grid.Column="0" Glyph="&#xE8A5;" FontSize="16" Margin="0,0,8,0" />
+                    <Grid ColumnDefinitions="Auto,2*,1*,1*,1*" Padding="8,4" RightTapped="OnItemRightTap">
+                        <FontIcon Grid.Column="0" Glyph="{Binding IconGlyph}" FontSize="16" Margin="0,0,8,0" />
                         <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                         <TextBlock Grid.Column="2" Text="{Binding FormattedSize}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" Margin="12,0" />
                         <TextBlock Grid.Column="3" Text="{Binding ContentType}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" Margin="12,0" />
@@ -63,17 +80,29 @@
         <GridView Grid.Row="2" x:Name="FileGrid" SelectionMode="Extended"
                   AllowDrop="True" CanDragItems="True" Visibility="Collapsed"
                   DragItemsStarting="OnDragStart" DragOver="OnDragOver" Drop="OnDrop"
-                  DoubleTapped="OnDoubleTap" KeyDown="OnListKeyDown">
+                  DoubleTapped="OnDoubleTap" Tapped="OnEmptyTap" KeyDown="OnListKeyDown"
+                  SelectionChanged="OnSelectionChanged"
+                  >
             <GridView.ItemTemplate>
                 <DataTemplate>
                     <StackPanel Width="100" Spacing="4" Padding="8" RightTapped="OnItemRightTap">
                         <Border Width="60" Height="60" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="4">
-                            <Image Source="{Binding PreviewImage}" Stretch="Uniform" MaxWidth="56" MaxHeight="56" />
+                            <Grid>
+                                <FontIcon Glyph="{Binding IconGlyph}" FontSize="28" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <Image Source="{Binding PreviewImage}" Stretch="UniformToFill" />
+                            </Grid>
                         </Border>
                         <TextBlock Text="{Binding Name}" Style="{StaticResource CaptionTextBlockStyle}" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="90" />
                     </StackPanel>
                 </DataTemplate>
             </GridView.ItemTemplate>
         </GridView>
+        <!-- Empty state for search -->
+        <StackPanel Grid.Row="2" x:Name="EmptyState" Visibility="Collapsed"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+            <FontIcon Glyph="&#xE721;" FontSize="32" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            <TextBlock x:Name="EmptyStateText" Style="{StaticResource BodyTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" HorizontalAlignment="Center" />
+        </StackPanel>
     </Grid>
 </UserControl>

@@ -13,8 +13,8 @@ public class ConfigService
     private readonly EncryptionService _enc = new();
     private byte[]? _vaultKey;
 
-    // Tier → MB mapping
-    public static readonly int[] ChunkTiers = { 0, 2, 4, 8, 16, 32, 64 };
+    // Tier → MB mapping (tier 0 is disabled/1MB minimum to avoid division by zero)
+    public static readonly int[] ChunkTiers = { 1, 2, 4, 8, 16, 32, 64 };
     public const int DefaultTier = 5; // 32 MB
 
     public ConfigService()
@@ -41,25 +41,37 @@ public class ConfigService
                        ?? new CoreConfig();
             }
         }
-        catch { }
+        catch (Exception ex) { LogService.Warn($"ConfigService.Load: {ex.Message}"); }
         return new CoreConfig();
     }
 
-    public void Save(CoreConfig config)
+    public async Task SaveAsync(CoreConfig config)
     {
         if (_vaultKey == null) return;
-        var json = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(config, JsonConfig.Options));
-        var blob = _enc.EncryptBlob(json, _vaultKey);
-        Directory.CreateDirectory(Path.GetDirectoryName(_configPath)!);
-        File.WriteAllBytes(_configPath, blob);
+        try
+        {
+            var json = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(config, JsonConfig.Options));
+            var blob = _enc.EncryptBlob(json, _vaultKey);
+            Directory.CreateDirectory(Path.GetDirectoryName(_configPath)!);
+            await File.WriteAllBytesAsync(_configPath, blob);
+        }
+        catch (Exception ex) { LogService.Warn($"ConfigService.SaveAsync: {ex.Message}"); }
     }
+
+    /// <summary>Fire-and-forget save for synchronous call sites.</summary>
+    public void Save(CoreConfig config) { if (_vaultKey != null) _ = SaveAsync(config); }
 
     /// <summary>Get chunk size in bytes for given tier.</summary>
     public static int ChunkSizeForTier(int tier) =>
-        tier >= 1 && tier < ChunkTiers.Length ? ChunkTiers[tier] * 1024 * 1024 : 32 * 1024 * 1024;
+        tier >= 0 && tier < ChunkTiers.Length ? ChunkTiers[tier] * 1024 * 1024 : 32 * 1024 * 1024;
 }
 
 public class CoreConfig
 {
     public int ChunkTier { get; set; } = ConfigService.DefaultTier;
+    public int MaxVersions { get; set; } = 10;
+    public int AutoLockTimeout { get; set; } = 0; // seconds; 0 = disabled
+    public bool GeneratePreviews { get; set; } = true; // encrypted thumbnails for images/videos
+    public int LockoutFails { get; set; } = 0; // persisted failed attempt count
+    public long LockoutUntilTicks { get; set; } = 0; // persisted lockout expiry (DateTime.Ticks, 0 = not locked)
 }

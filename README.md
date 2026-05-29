@@ -73,8 +73,6 @@ Gyroown/
 │   ├── Loc                         # Static localization helper
 │   └── ILocalizationService        # Language pack interface
 └── Gyroown.csproj                  # .NET 8 + WinUI 3
-
-Gyroown (Package)/                  # MSIX packaging
 ```
 
 ### Tech Stack
@@ -85,7 +83,7 @@ Gyroown (Package)/                  # MSIX packaging
 | Language | C# 12, XAML |
 | Runtime | .NET 8 |
 | Crypto | RSA 2048, AES-256-GCM, PBKDF2-SHA256 |
-| Packaging | MSIX |
+| Packaging | Unpackaged (standalone .exe) |
 | Min OS | Windows 10 1809 (build 17763) |
 
 ### Architecture

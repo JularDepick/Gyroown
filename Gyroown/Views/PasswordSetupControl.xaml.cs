@@ -9,18 +9,23 @@ public sealed partial class PasswordSetupControl : UserControl
 {
     private readonly PasswordService _pw;
     private IPasswordControl? _ctrl;
-    private string _type = "custom";
+    private string _type = "pin";
     private object? _first;
     private bool _confirming, _insuranceStep;
     private string? _insuranceEmail;
+    private string? _insuranceToken;
     public event EventHandler<object>? SetupCompleted;
+    public string? CapturedInsuranceEmail => _insuranceEmail;
+    public string? CapturedInsuranceToken => _insuranceToken;
 
     public PasswordSetupControl(PasswordService pw)
     {
         _pw = pw;
         InitializeComponent();
         ApplyLoc();
-        Loc.LanguageChanged += (_, _) => ApplyLoc();
+        var handler = (EventHandler)((_, _) => ApplyLoc());
+        Loc.LanguageChanged += handler;
+        Unloaded += (_, _) => Loc.LanguageChanged -= handler;
         LoadCtrl(_type);
     }
 
@@ -74,7 +79,7 @@ public sealed partial class PasswordSetupControl : UserControl
         }
         _confirming = false; _first = null; StepHint.Text = Loc.Get("SetupWindow", "StepEnter");
         NextBtn.Visibility = Visibility.Visible; ConfirmPanel.Visibility = Visibility.Collapsed;
-        PwTypeSel.IsEnabled = true; SetBtn.IsEnabled = false;
+        NextBtn.IsEnabled = false; PwTypeSel.IsEnabled = true; SetBtn.IsEnabled = false;
         _ctrl!.Validated -= OnConfirmed; _ctrl.Validated += OnEntered; _ctrl.Clear();
     }
 
@@ -99,42 +104,56 @@ public sealed partial class PasswordSetupControl : UserControl
 
     async void OnSendCode(object s, RoutedEventArgs e)
     {
-        var email = InsuranceEmail.Text?.Trim();
-        if (string.IsNullOrEmpty(email) || !email.Contains('@')) { InsuranceStatus.Text = Loc.Get("SetupWindow", "InvalidEmail"); return; }
-        _insuranceEmail = email;
-        var r = await InsuranceService.RequestCodeAsync(email);
-        InsuranceStatus.Text = r.Success ? Loc.Get("SetupWindow", "CodeSent") : Loc.Get("SetupWindow", "InsuranceCodeFail");
-        InsuranceCode.Visibility = Visibility.Visible;
-        VerifyCodeBtn.Visibility = Visibility.Visible;
+        try
+        {
+            var email = InsuranceEmail.Text?.Trim();
+            if (string.IsNullOrEmpty(email) || !email.Contains('@')) { InsuranceStatus.Text = Loc.Get("SetupWindow", "InvalidEmail"); return; }
+            _insuranceEmail = email;
+            var r = await InsuranceService.RequestCodeAsync(email);
+            InsuranceStatus.Text = r.Success ? Loc.Get("SetupWindow", "CodeSent") : Loc.Get("SetupWindow", "InsuranceCodeFail");
+            InsuranceCode.Visibility = Visibility.Visible;
+            VerifyCodeBtn.Visibility = Visibility.Visible;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+        }
     }
 
     async void OnVerifyCode(object s, RoutedEventArgs e)
     {
-        if (_insuranceEmail == null) return;
-        var r = await InsuranceService.VerifyCodeAsync(_insuranceEmail, InsuranceCode.Text?.Trim() ?? "");
-        if (r.Success) { InsuranceStatus.Text = Loc.Get("SetupWindow", "InsuranceDone"); DoneBtn.Visibility = Visibility.Visible; }
-        else InsuranceStatus.Text = Loc.Get("SetupWindow", "InsuranceVerifyFail");
+        try
+        {
+            if (_insuranceEmail == null) return;
+            var r = await InsuranceService.VerifyCodeAsync(_insuranceEmail, InsuranceCode.Text?.Trim() ?? "");
+            if (r.Success) { _insuranceToken = r.Data as string; InsuranceStatus.Text = Loc.Get("SetupWindow", "InsuranceDone"); DoneBtn.Visibility = Visibility.Visible; }
+            else InsuranceStatus.Text = Loc.Get("SetupWindow", "InsuranceVerifyFail");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+        }
     }
 
     void OnSkipInsurance(object s, RoutedEventArgs e) => Finish();
 
     void OnDone(object s, RoutedEventArgs e) => Finish();
 
-    void Finish() { SetupCompleted?.Invoke(this, _first!); }
+    void Finish() { var cred = _first!; _first = null; _ctrl?.Clear(); SetupCompleted?.Invoke(this, cred); }
 
     void OnKeyDown(object s, KeyRoutedEventArgs e)
     {
         if (e.Key == Windows.System.VirtualKey.Enter)
         {
             if (_insuranceStep) return;
-            if (!_confirming && NextBtn.Visibility == Visibility.Visible) OnNext(this, new());
+            if (!_confirming && NextBtn.Visibility == Visibility.Visible && NextBtn.IsEnabled) OnNext(this, new());
             else if (_confirming && SetBtn.IsEnabled) OnSet(this, new());
             e.Handled = true;
         }
         else if (e.Key == Windows.System.VirtualKey.Escape && _confirming && !_insuranceStep) { OnBack(this, new()); e.Handled = true; }
     }
 
-    static bool Valid(object c) => c switch { string s => s.Length >= 6, int[] seq => seq.Length >= 4, Array => true, _ => false };
+    static bool Valid(object c) => c switch { string s => s.Length >= 6, int[] seq => seq.Length >= 4, Array arr => arr.Length > 0, _ => false };
     static bool Match(object a, object b)
     {
         if (a is string sa && b is string sb) return sa == sb;

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Gyroown.Controls.Preview.FilePreviewWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:preview="using:Gyroown.Controls.Preview"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="View">
+
+    <Grid x:Name="RootGrid" RowDefinitions="Auto,*,Auto"
+          Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+          PreviewKeyDown="OnRootKeyDown">
+        <!-- Top toolbar: navigation + file info -->
+        <Grid Grid.Row="0" Padding="8,4"
+              Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,0,1"
+              ColumnDefinitions="Auto,8,*,8,Auto">
+            <!-- Prev/Next navigation -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+                <Button x:Name="PrevBtn" Click="OnPrevFile" Width="32" Height="28"
+                        AutomationProperties.Name="Previous File">
+                    <FontIcon Glyph="&#xE72B;" FontSize="14" />
+                </Button>
+                <Button x:Name="NextBtn" Click="OnNextFile" Width="32" Height="28"
+                        AutomationProperties.Name="Next File">
+                    <FontIcon Glyph="&#xE72A;" FontSize="14" />
+                </Button>
+                <TextBlock x:Name="FileCounter" VerticalAlignment="Center" Margin="8,0"
+                           FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+
+            <!-- File name (center) -->
+            <TextBlock Grid.Column="2" x:Name="FileName"
+                       VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold"
+                       TextTrimming="CharacterEllipsis" />
+
+            <!-- Close button -->
+            <Button Grid.Column="4" x:Name="CloseBtn" Click="OnClose"
+                    Width="32" Height="28" AutomationProperties.Name="Close">
+                <FontIcon Glyph="&#xE8BB;" FontSize="14" />
+            </Button>
+        </Grid>
+
+        <!-- Viewer content area -->
+        <Grid Grid.Row="1" x:Name="ViewerHost" />
+
+        <!-- Bottom bar: file details -->
+        <Grid Grid.Row="2" Padding="12,4"
+              Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,0"
+              ColumnDefinitions="*,Auto,Auto,Auto">
+            <TextBlock Grid.Column="0" x:Name="FileFullName"
+                       VerticalAlignment="Center" FontSize="11"
+                       TextTrimming="CharacterEllipsis"
+                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            <TextBlock Grid.Column="1" x:Name="FileSizeText"
+                       VerticalAlignment="Center" FontSize="11" Margin="16,0"
+                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            <TextBlock Grid.Column="2" x:Name="FileTypeText"
+                       VerticalAlignment="Center" FontSize="11" Margin="0,0,16,0"
+                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            <TextBlock Grid.Column="3" x:Name="FileDateText"
+                       VerticalAlignment="Center" FontSize="11"
+                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+        </Grid>
+    </Grid>
+</Window>

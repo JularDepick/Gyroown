@@ -31,9 +31,9 @@ project.assets.json
 *.AssemblyInfo.cs
 
 # Build output (generated)
-*.log
 *.etl
-build.log
+*.log
+!docs/DevLog/*.log
 
 # OS
 .DS_Store
@@ -45,5 +45,6 @@ Desktop.ini
 *.swp
 *~
 
-# Reasonix
+# Vibe Coding
 .reasonix/
+.startClaude.bat

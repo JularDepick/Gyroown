@@ -1,22 +1,22 @@
 ﻿namespace Gyroown.Services;
 
 /// <summary>
-/// (stub) — 从 INI (stub)
+/// Localization service interface — loads translated strings from INI language files, supports runtime language switching.
 /// </summary>
 public interface ILocalizationService
 {
-    /// <summary>(stub) section (stub) key (stub)</summary>
+    /// <summary>Get a translated string by section and key; returns [section.key] fallback if not found.</summary>
     string Get(string section, string key);
 
-    /// <summary>(stub) "zh-CN", "en-US"）</summary>
+    /// <summary>Current language code (e.g. "zh-CN", "en-US").</summary>
     string CurrentLanguage { get; }
 
-    /// <summary>(stub)</summary>
+    /// <summary>Switch language: reload the corresponding INI file and fire the LanguageChanged event.</summary>
     void SetLanguage(string langCode);
 
-    /// <summary>(stub)</summary>
+    /// <summary>Get a list of all available language codes.</summary>
     IReadOnlyList<string> GetAvailableLanguages();
 
-    /// <summary>(stub)UI (stub)</summary>
+    /// <summary>Language change event, used to notify UI to refresh displayed text.</summary>
     event EventHandler? LanguageChanged;
 }

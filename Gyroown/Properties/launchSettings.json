@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Gyroown": {
+      "commandName": "Project",
+      "nativeDebugging": false
+    }
+  }
+}

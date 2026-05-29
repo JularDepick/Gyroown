@@ -14,7 +14,9 @@ public sealed partial class CustomPasswordControl : UserControl, IPasswordContro
     public CustomPasswordControl()
     {
         InitializeComponent();
-        Loc.LanguageChanged += (_, _) => ApplyLocalization();
+        var handler = (EventHandler)((_, _) => ApplyLocalization());
+        Loc.LanguageChanged += handler;
+        Unloaded += (_, _) => Loc.LanguageChanged -= handler;
         ApplyLocalization();
     }
 
@@ -32,8 +34,6 @@ public sealed partial class CustomPasswordControl : UserControl, IPasswordContro
         if (pw.Length < _cfg.CustomMinLength) { RangeText.Text = $"{Loc.Get("CustomControl", "Range")} ({pw.Length})"; return; }
         foreach (var c in pw) if (!_cfg.AllowedChars.Contains(c)) { RangeText.Text = Loc.Format("CustomControl", "BadChar", c); return; }
         RangeText.Text = Loc.Format("CustomControl", "Valid", pw.Length);
-        if (pw.Length >= _cfg.CustomMinLength && pw.Length <= _cfg.CustomMaxLength)
-            Validated?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnKey(object s, KeyRoutedEventArgs e)
@@ -46,4 +46,5 @@ public sealed partial class CustomPasswordControl : UserControl, IPasswordContro
 
     public object GetCredential() => Input.Password;
     public void Clear() { Input.Password = ""; RangeText.Text = Loc.Get("CustomControl", "Range"); ErrorText.Visibility = Visibility.Collapsed; }
+    public void FocusInput() => Input.Focus(FocusState.Programmatic);
 }

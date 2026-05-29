@@ -7,7 +7,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid RowDefinitions="Auto,*,Auto" Padding="32,48,32,24" KeyDown="OnKeyDown">
+    <Grid RowDefinitions="Auto,*,Auto" Padding="32,48,32,24" KeyDown="OnKeyDown" CharacterReceived="OnCharReceived">
         <TextBlock Grid.Row="0" x:Name="TitleText" Style="{StaticResource TitleTextBlockStyle}" HorizontalAlignment="Center" Margin="0,0,0,16" />
         <ContentControl Grid.Row="1" x:Name="CtrlHost" />
         <StackPanel Grid.Row="2" Spacing="8" HorizontalAlignment="Center">

@@ -6,7 +6,7 @@
 /// </summary>
 public static class Loc
 {
-    private static ILocalizationService _service = new StubLocalizationService();
+    private static ILocalizationService _service = new LocalizationService();
 
     public static ILocalizationService Service
     {
@@ -15,10 +15,7 @@ public static class Loc
         {
             if (_service != value)
             {
-                if (_service is StubLocalizationService)
-                    _service = value;
-                else
-                    _service.LanguageChanged -= OnLanguageChanged;
+                _service.LanguageChanged -= OnLanguageChanged;
                 _service = value;
                 _service.LanguageChanged += OnLanguageChanged;
             }

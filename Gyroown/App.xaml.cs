@@ -15,7 +15,15 @@ public partial class App : Application
     [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr h, int n);
     private const int SW_RESTORE = 9;
 
-    public App() => InitializeComponent();
+    public App()
+    {
+        InitializeComponent();
+        UnhandledException += (_, e) =>
+        {
+            LogService.Crash("Unhandled exception", e.Exception);
+            e.Handled = true;
+        };
+    }
 
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
@@ -24,7 +32,7 @@ public partial class App : Application
         var pw = new PasswordService();
         var enc = new EncryptionService();
         var vault = new VaultService();
-        Loc.Service = new StubLocalizationService();
+        Loc.Service = new LocalizationService();
 
         _w = new MainWindow(pw, enc, vault);
         ActiveWindow = _w;
@@ -33,14 +41,24 @@ public partial class App : Application
 
     bool EnsureSingle()
     {
-        var n = Process.GetCurrentProcess().ProcessName;
+        using var current = Process.GetCurrentProcess();
+        var n = current.ProcessName;
         var ps = Process.GetProcessesByName(n);
-        if (ps.Length > 1)
+        try
         {
-            var h = ps.Where(p => p.Id != Environment.ProcessId).Select(p => p.MainWindowHandle).FirstOrDefault(h => h != IntPtr.Zero);
-            if (h != IntPtr.Zero) { if (IsIconic(h)) ShowWindow(h, SW_RESTORE); SetForegroundWindow(h); }
-            Environment.Exit(0); return false;
+            if (ps.Length > 1)
+            {
+                var h = ps.Where(p => p.Id != Environment.ProcessId)
+                          .Select(p => { try { return p.MainWindowHandle; } catch { return IntPtr.Zero; } })
+                          .FirstOrDefault(h => h != IntPtr.Zero);
+                if (h != IntPtr.Zero) { if (IsIconic(h)) ShowWindow(h, SW_RESTORE); SetForegroundWindow(h); }
+                Environment.Exit(0); return false;
+            }
+            return true;
         }
-        return true;
+        finally
+        {
+            foreach (var p in ps) p.Dispose();
+        }
     }
 }

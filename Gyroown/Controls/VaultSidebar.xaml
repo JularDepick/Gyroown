@@ -5,20 +5,36 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:controls="using:Gyroown.Controls"
     mc:Ignorable="d"
     MinWidth="180">
 
-    <Grid RowDefinitions="Auto,*">
-        <TextBlock
+    <Grid RowDefinitions="Auto,Auto,*">
+        <!-- Favorites panel -->
+        <controls:FavoritesPanel
             Grid.Row="0"
-            Text="Folders"
-            FontWeight="SemiBold"
-            Margin="12,8" />
+            x:Name="Favorites" />
 
-        <TreeView
+        <!-- Divider -->
+        <Border
             Grid.Row="1"
-            x:Name="FolderTreeView"
-            SelectionChanged="OnFolderSelected"
-            Padding="8,4" />
+            Height="1"
+            Background="{ThemeResource CardStrokeColorDefaultBrush}"
+            Margin="12,4" />
+
+        <!-- Folder tree -->
+        <Grid Grid.Row="2" RowDefinitions="Auto,*">
+            <TextBlock
+                Grid.Row="0"
+                x:Name="FoldersLabel"
+                FontWeight="SemiBold"
+                Margin="12,8" />
+
+            <TreeView
+                Grid.Row="1"
+                x:Name="FolderTreeView"
+                SelectionChanged="OnFolderSelected"
+                Padding="8,4" />
+        </Grid>
     </Grid>
 </UserControl>
