@@ -21,6 +21,7 @@ public sealed partial class FilePreviewWindow : Window
     private ImagePreviewControl? _imageViewer;
     private TextPreviewControl? _textViewer;
     private VideoPreviewControl? _videoViewer;
+    private MemoryStream? _videoStream;
 
     public FilePreviewWindow(
         VaultService vault,
@@ -57,7 +58,7 @@ public sealed partial class FilePreviewWindow : Window
                 presenter.IsMaximizable = true;
             }
         }
-        catch { /* degrade gracefully */ }
+        catch (Exception ex) { LogService.Debug($"FilePreviewWindow presenter config: {ex.Message}"); }
 
         // Load current file
         _ = LoadCurrentFileAsync();
@@ -173,8 +174,9 @@ public sealed partial class FilePreviewWindow : Window
         else if (ct.StartsWith("video/") || ct.StartsWith("audio/"))
         {
             _videoViewer = new VideoPreviewControl();
-            var ms = new MemoryStream(data);
-            _videoViewer.LoadVideo(ms.AsRandomAccessStream(), ct);
+            _videoStream?.Dispose();
+            _videoStream = new MemoryStream(data);
+            _videoViewer.LoadVideo(_videoStream.AsRandomAccessStream(), ct);
             ViewerHost.Children.Add(_videoViewer);
         }
         else
@@ -220,13 +222,15 @@ public sealed partial class FilePreviewWindow : Window
             await bmp.SetSourceAsync(ms.AsRandomAccessStream());
             _imageViewer?.SetImage(bmp);
         }
-        catch { /* image load failure is non-fatal */ }
+        catch (Exception ex) { LogService.Debug($"LoadImageAsync failed: {ex.Message}"); }
     }
 
     void CleanupViewers()
     {
         _videoViewer?.Cleanup();
         _videoViewer = null;
+        _videoStream?.Dispose();
+        _videoStream = null;
         _imageViewer?.StopSlideshow();
         _imageViewer = null;
         _textViewer = null;

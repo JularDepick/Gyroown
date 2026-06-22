@@ -49,7 +49,7 @@ public class ThemeService : IThemeService
     /// </summary>
     public void Initialize(byte[] vaultKey)
     {
-        _vaultKey = vaultKey;
+        _vaultKey = (byte[])vaultKey.Clone();
         var oldTheme = _current;
         var oldAccent = _accent;
         var oldLang = _language;
@@ -92,16 +92,24 @@ public class ThemeService : IThemeService
         catch (Exception ex) { LogService.Warn($"ThemeService.Load: {ex.Message}"); }
     }
 
+    /// <summary>Clear vault key from memory. Call when locking the vault.</summary>
+    public void ClearKey()
+    {
+        if (_vaultKey != null) { Array.Clear(_vaultKey); _vaultKey = null; }
+    }
+
     private async Task SaveAsync()
     {
-        if (_vaultKey == null) return;
+        var key = _vaultKey;
+        if (key == null) return;
         try
         {
             var json = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(
                 new SettingsData { Theme = _current.ToString(), Accent = _accent, Language = _language },
                 JsonConfig.Options));
-            var blob = _enc.EncryptBlob(json, _vaultKey);
-            Directory.CreateDirectory(Path.GetDirectoryName(_settingsFile)!);
+            var blob = _enc.EncryptBlob(json, key);
+            var dir = Path.GetDirectoryName(_settingsFile);
+            if (dir != null) Directory.CreateDirectory(dir);
             await File.WriteAllBytesAsync(_settingsFile, blob);
         }
         catch (Exception ex) { LogService.Warn($"ThemeService.SaveAsync: {ex.Message}"); }

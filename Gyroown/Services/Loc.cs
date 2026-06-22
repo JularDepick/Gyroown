@@ -1,4 +1,4 @@
-﻿namespace Gyroown.Services;
+namespace Gyroown.Services;
 
 /// <summary>
 /// Static localization helper — provides concise access to localized strings
@@ -24,8 +24,18 @@ public static class Loc
 
     public static string Get(string section, string key) => _service.Get(section, key);
 
-    public static string Format(string section, string key, params object[] args) =>
-        string.Format(_service.Get(section, key), args);
+    public static string Format(string section, string key, params object[] args)
+    {
+        try
+        {
+            return string.Format(_service.Get(section, key), args);
+        }
+        catch (FormatException ex)
+        {
+            LogService.Warn($"Loc.Format failed for '{section}.{key}': {ex.Message}");
+            return _service.Get(section, key);
+        }
+    }
 
     public static event EventHandler? LanguageChanged;
 

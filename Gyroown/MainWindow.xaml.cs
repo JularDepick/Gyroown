@@ -57,7 +57,7 @@ public sealed partial class MainWindow : Window
             if (!File.Exists(iconPath)) iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "favicon.ico");
             if (File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
         }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"SetIcon failed: {ex.Message}"); }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"SetIcon failed: {ex.Message}"); LogService.Debug($"SetIcon failed: {ex.Message}"); }
         Activated += (_, _) =>
         {
             SetTitleBar(TitleBar.GetDragElement());
@@ -79,6 +79,8 @@ public sealed partial class MainWindow : Window
             if (!_pw.IsLocked && _vault.IsInitialized)
             {
                 _vault.ClearKeys();
+                _theme.ClearKey();
+                _favorites.ClearKey();
                 _pw.Lock();
                 AuthOverlay.Visibility = Visibility.Visible;
                 VaultContent.Visibility = Visibility.Collapsed;
@@ -302,8 +304,9 @@ public sealed partial class MainWindow : Window
     {
         var current = _vault.CurrentPath;
         if (current == "/") return;
-        var parent = System.IO.Path.GetDirectoryName(current.Replace('\\', '/'))?.Replace('\\', '/') ?? "/";
-        if (string.IsNullOrEmpty(parent)) parent = "/";
+        var norm = current.Replace('\\', '/');
+        var lastSlash = norm.LastIndexOf('/');
+        var parent = lastSlash <= 0 ? "/" : norm[..lastSlash];
         NavigateTo(parent);
     }
 
@@ -433,6 +436,8 @@ public sealed partial class MainWindow : Window
         _autoLockTimer?.Stop();
         if (_pw.IsLocked || _busy) { ResetAutoLockTimer(); return; }
         _vault.ClearKeys();
+        _theme.ClearKey();
+        _favorites.ClearKey();
         _pw.Lock();
         StatusBar.SetLocked(true);
         AuthOverlay.Visibility = Visibility.Visible;
@@ -498,6 +503,8 @@ public sealed partial class MainWindow : Window
                         if (!_pw.IsLocked && _vault.IsInitialized)
                         {
                             _vault.ClearKeys();
+                            _theme.ClearKey();
+                            _favorites.ClearKey();
                             _pw.Lock();
                             AuthOverlay.Visibility = Visibility.Visible;
                             VaultContent.Visibility = Visibility.Collapsed;
@@ -563,8 +570,9 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"InitializeAuthFlow failed: {ex}");
+            LogService.Warn($"InitializeAuthFlow failed: {ex.Message}");
             // Fallback: show setup if possible, otherwise the user sees the auth overlay
-            try { if (!_pw.IsPasswordSet) ShowSetup(); } catch (Exception ex2) { System.Diagnostics.Debug.WriteLine($"AuthFlow fallback failed: {ex2.Message}"); }
+            try { if (!_pw.IsPasswordSet) ShowSetup(); } catch (Exception ex2) { LogService.Warn($"AuthFlow fallback failed: {ex2.Message}"); }
         }
     }
 
@@ -741,7 +749,7 @@ public sealed partial class MainWindow : Window
         {
             await InsuranceService.UploadAsync(email, token, insPriv);
         }
-        catch { /* upload is non-critical; insurance blob is already saved locally */ }
+        catch (Exception ex) { LogService.Debug($"Insurance upload non-critical: {ex.Message}"); }
     }
 
     void ShowUnlock()
@@ -818,7 +826,7 @@ public sealed partial class MainWindow : Window
             _activeDialog = null;
             return result;
         }
-        catch { _activeDialog = null; return ContentDialogResult.None; }
+        catch (Exception ex) { _activeDialog = null; LogService.Debug($"ShowDialog failed: {ex.Message}"); return ContentDialogResult.None; }
     }
     // Must match PasswordService.SerializeCredential output exactly — different format
     // produces a different PBKDF2-derived user key, permanently locking out the vault.
@@ -998,7 +1006,7 @@ public sealed partial class MainWindow : Window
             titleBar.ButtonPressedBackgroundColor = bgColor;
             titleBar.ButtonPressedForegroundColor = fgColor;
         }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"ApplyTheme titlebar failed: {ex.Message}"); }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"ApplyTheme titlebar failed: {ex.Message}"); LogService.Debug($"ApplyTheme titlebar failed: {ex.Message}"); }
 
         ApplyAccent(_theme.AccentColor);
     }
@@ -1184,7 +1192,9 @@ public sealed partial class MainWindow : Window
             totalSize += fileSizes[i];
         }
         var drive = new DriveInfo(Path.GetPathRoot(_vault.VaultPath) ?? "C:\\");
-        if (drive.AvailableFreeSpace < totalSize)
+        // Account for encryption overhead (~10% for RSA+AES headers)
+        var requiredSpace = totalSize + totalSize / 10 + 1024 * 1024; // +10% + 1MB margin
+        if (drive.AvailableFreeSpace < requiredSpace)
         {
             await Info(Loc.Get("MainWindow", "DiskSpaceInsufficient"));
             return;
@@ -1346,7 +1356,7 @@ public sealed partial class MainWindow : Window
                 await using var st = await f.OpenStreamForReadAsync();
                 await _vault.ImportItemAsync(st, f.Name);
                 UpdateProgress((double)(i + 1) / files.Count, Loc.Format("MainWindow", "BatchProgressFile", i + 1, files.Count, f.Name));
-                try { await f.DeleteAsync(); } catch { }
+                try { await f.DeleteAsync(); } catch (Exception ex) { LogService.Debug($"MoveIn source delete failed for {f.Name}: {ex.Message}"); }
             }
         }
         finally { _busy = false; HideProgress(); RefreshList(); }
@@ -1406,8 +1416,9 @@ public sealed partial class MainWindow : Window
 
     async void OnDropIn(object? s, IReadOnlyList<string> paths)
     {
-        var files = paths.Where(p => File.Exists(p)).ToList();
-        var dirs = paths.Where(p => Directory.Exists(p)).ToList();
+        if (paths == null || paths.Count == 0) return;
+        var files = paths.Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p) && !p.Contains("..")).ToList();
+        var dirs = paths.Where(p => !string.IsNullOrWhiteSpace(p) && Directory.Exists(p) && !p.Contains("..")).ToList();
         if (files.Count + dirs.Count == 0) return;
 
         _busy = true;
@@ -1498,7 +1509,7 @@ public sealed partial class MainWindow : Window
         await ReportBatchResult(Loc.Get("MainWindow", "Delete"), items.Count, errors);
     }
 
-    async void OnLockCmd(object s, RoutedEventArgs e) { if (_busy) return; _busy = true; try { _vault.ClearKeys(); _pw.Lock(); StatusBar.SetLocked(true); AuthOverlay.Visibility = Visibility.Visible; VaultContent.Visibility = Visibility.Collapsed; ShowUnlock(); } finally { _busy = false; } }
+    async void OnLockCmd(object s, RoutedEventArgs e) { if (_busy) return; _busy = true; try { _vault.ClearKeys(); _theme.ClearKey(); _favorites.ClearKey(); _pw.Lock(); StatusBar.SetLocked(true); AuthOverlay.Visibility = Visibility.Visible; VaultContent.Visibility = Visibility.Collapsed; ShowUnlock(); } finally { _busy = false; } }
 
     async void OnNewFolderCmd(object s, RoutedEventArgs e)
     {
@@ -1581,7 +1592,7 @@ public sealed partial class MainWindow : Window
         // Close existing preview window
         if (_previewWindow != null)
         {
-            try { _previewWindow.Close(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Preview close failed: {ex.Message}"); }
+            try { _previewWindow.Close(); } catch (Exception ex) { LogService.Debug($"Preview close failed: {ex.Message}"); }
             _previewWindow = null;
         }
 

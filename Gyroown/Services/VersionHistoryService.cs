@@ -72,6 +72,8 @@ public class VersionHistoryService
         long originalSize, string contentType, string description = "")
     {
         ValidateFileId(fileId);
+        if (data == null || data.Length == 0)
+            throw new ArgumentException("Version data cannot be empty.", nameof(data));
         EnsureDir(fileId);
 
         var versions = ListVersions(fileId, privateKey);
@@ -298,7 +300,12 @@ public class VersionHistoryService
     {
         try
         {
+            if (!File.Exists(path)) return;
             var sz = new FileInfo(path).Length;
+            if (sz == 0) return;
+            var attr = File.GetAttributes(path);
+            if ((attr & FileAttributes.ReadOnly) != 0)
+                File.SetAttributes(path, attr & ~FileAttributes.ReadOnly);
             var r = RandomNumberGenerator.GetBytes((int)Math.Min(sz, 4096));
             using var fs = new FileStream(path, FileMode.Open, FileAccess.Write);
             for (long p = 0; p < sz; p += r.Length)

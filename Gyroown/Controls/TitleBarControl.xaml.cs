@@ -91,7 +91,8 @@ public sealed partial class TitleBarControl : UserControl
         if (_vaultKey == null) return;
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(HistoryFile)!);
+            var dir = Path.GetDirectoryName(HistoryFile);
+            if (dir != null) Directory.CreateDirectory(dir);
             var json = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(_history.Take(MaxHistory).ToArray()));
             var blob = _enc.EncryptBlob(json, _vaultKey);
             await File.WriteAllBytesAsync(HistoryFile, blob);
