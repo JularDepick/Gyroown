@@ -34,15 +34,29 @@ public class VersionHistoryService
         _versionsDir = Path.Combine(vaultRoot, "versions");
     }
 
+    /// <summary>Validate fileId to prevent path traversal.</summary>
+    private static void ValidateFileId(string fileId)
+    {
+        if (string.IsNullOrWhiteSpace(fileId))
+            throw new ArgumentException("File ID cannot be empty.", nameof(fileId));
+        if (fileId.Contains("..") || fileId.Contains('/') || fileId.Contains('\\') || fileId.Contains(':'))
+            throw new ArgumentException("Invalid file ID: path traversal detected.", nameof(fileId));
+    }
+
     /// <summary>Ensure the versions directory exists.</summary>
     private void EnsureDir(string fileId)
     {
+        ValidateFileId(fileId);
         Directory.CreateDirectory(_versionsDir);
         Directory.CreateDirectory(Path.Combine(_versionsDir, fileId));
     }
 
     /// <summary>Get the version directory path for the specified file.</summary>
-    private string GetFileVersionsDir(string fileId) => Path.Combine(_versionsDir, fileId);
+    private string GetFileVersionsDir(string fileId)
+    {
+        ValidateFileId(fileId);
+        return Path.Combine(_versionsDir, fileId);
+    }
 
     /// <summary>
     /// Save the current file as a new version (called before overwrite).
@@ -57,6 +71,7 @@ public class VersionHistoryService
     public FileVersionRecord SaveVersion(string fileId, byte[] data, byte[] privateKey,
         long originalSize, string contentType, string description = "")
     {
+        ValidateFileId(fileId);
         EnsureDir(fileId);
 
         var versions = ListVersions(fileId, privateKey);
@@ -96,6 +111,7 @@ public class VersionHistoryService
     public FileVersionRecord SaveVersionFromFile(string fileId, string filePath, byte[] privateKey,
         long originalSize, string contentType, string description = "")
     {
+        ValidateFileId(fileId);
         if (!File.Exists(filePath))
             throw new FileNotFoundException("Source file not found", filePath);
 
@@ -108,6 +124,7 @@ public class VersionHistoryService
     /// </summary>
     public IReadOnlyList<FileVersionRecord> ListVersions(string fileId, byte[] privateKey)
     {
+        ValidateFileId(fileId);
         var dir = GetFileVersionsDir(fileId);
         if (!Directory.Exists(dir))
             return Array.Empty<FileVersionRecord>();
@@ -140,6 +157,7 @@ public class VersionHistoryService
     /// <returns>Decrypted original data.</returns>
     public byte[] RestoreVersion(string fileId, int versionNumber, byte[] privateKey)
     {
+        ValidateFileId(fileId);
         var dir = GetFileVersionsDir(fileId);
         var dataPath = Path.Combine(dir, $"v{versionNumber}.gyroverdata");
 
@@ -155,6 +173,7 @@ public class VersionHistoryService
     /// </summary>
     public FileVersionRecord? GetVersionRecord(string fileId, int versionNumber, byte[] privateKey)
     {
+        ValidateFileId(fileId);
         var dir = GetFileVersionsDir(fileId);
         var metaPath = Path.Combine(dir, $"v{versionNumber}.gyrovermeta");
 
@@ -166,8 +185,9 @@ public class VersionHistoryService
             var json = Encoding.UTF8.GetString(_enc.DecryptBlob(encMeta, privateKey));
             return JsonSerializer.Deserialize<FileVersionRecord>(json, JsonConfig.Options);
         }
-        catch
+        catch (Exception ex)
         {
+            LogService.Debug($"GetVersionRecord failed for '{fileId}' v{versionNumber}: {ex.Message}");
             return null;
         }
     }
@@ -177,6 +197,7 @@ public class VersionHistoryService
     /// </summary>
     private void CleanOldVersions(string fileId, byte[] privateKey)
     {
+        ValidateFileId(fileId);
         var versions = ListVersions(fileId, privateKey);
         if (versions.Count <= _maxVersions) return;
 
@@ -197,6 +218,7 @@ public class VersionHistoryService
     /// </summary>
     public int CleanVersions(string fileId, byte[] privateKey, int? maxVersions = null)
     {
+        ValidateFileId(fileId);
         var limit = maxVersions ?? _maxVersions;
         var versions = ListVersions(fileId, privateKey);
 
@@ -221,6 +243,7 @@ public class VersionHistoryService
     /// </summary>
     public void DeleteAllVersions(string fileId)
     {
+        ValidateFileId(fileId);
         var dir = GetFileVersionsDir(fileId);
         if (!Directory.Exists(dir)) return;
 
@@ -245,6 +268,7 @@ public class VersionHistoryService
     /// </summary>
     public int GetVersionCount(string fileId)
     {
+        ValidateFileId(fileId);
         var dir = GetFileVersionsDir(fileId);
         if (!Directory.Exists(dir)) return 0;
         return Directory.GetFiles(dir, "*.gyrovermeta").Length;
@@ -255,6 +279,7 @@ public class VersionHistoryService
     /// </summary>
     public bool HasVersions(string fileId)
     {
+        ValidateFileId(fileId);
         return GetVersionCount(fileId) > 0;
     }
 
@@ -280,6 +305,6 @@ public class VersionHistoryService
                 fs.Write(r, 0, (int)Math.Min(r.Length, sz - p));
             fs.Flush();
         }
-        catch { /* best effort */ }
+        catch (Exception ex) { LogService.Debug($"SecureDelete failed for '{path}': {ex.Message}"); }
     }
 }

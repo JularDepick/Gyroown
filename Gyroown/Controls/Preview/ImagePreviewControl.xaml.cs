@@ -2,6 +2,8 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.UI.Xaml.Automation;
+using Gyroown.Services;
 
 namespace Gyroown.Controls.Preview;
 
@@ -32,6 +34,19 @@ public sealed partial class ImagePreviewControl : UserControl
         {
             if (_fitToWindow) FitToWindow();
         };
+        var langHandler = (EventHandler)((_, _) => ApplyLoc());
+        Loc.LanguageChanged += langHandler;
+        Unloaded += (_, _) => Loc.LanguageChanged -= langHandler;
+        ApplyLoc();
+    }
+
+    void ApplyLoc()
+    {
+        AutomationProperties.SetName(ZoomOutBtn, Loc.Get("Common", "ZoomOut"));
+        AutomationProperties.SetName(ZoomInBtn, Loc.Get("Common", "ZoomIn"));
+        AutomationProperties.SetName(FitToggle, Loc.Get("Common", "FitToWindow"));
+        AutomationProperties.SetName(ResetZoomBtn, Loc.Get("Common", "ResetZoom"));
+        AutomationProperties.SetName(SlideshowBtn, Loc.Get("Common", "Slideshow"));
     }
 
     public void SetImage(BitmapImage bmp)

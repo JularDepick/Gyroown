@@ -6,7 +6,7 @@ namespace Gyroown;
 public static class AppInfo
 {
     public const string Name = "Gyroown";
-    public const string Version = "0.1.1";
+    public const string Version = "0.2.5";
     public const string VersionPrefix = "v";
     public const string FullVersion = $"{VersionPrefix}{Version}";
     public const string Author = "JularDepick";

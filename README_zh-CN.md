@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="favicon.png" width="72px"/>
+
 # Gyroown
 
 [![](https://img.shields.io/badge/Copyright-Gyroown-0066AA)](./COPYRIGHT)

@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
@@ -7,7 +7,7 @@ namespace Gyroown.Services;
 
 public class PasswordService : IPasswordService
 {
-    private const int SaltSize = 32, HashSize = 32, Iterations = 100_000, UserKeySize = 32;
+    private const int SaltSize = Constants.SaltSize, HashSize = Constants.HashSize, Iterations = Constants.Pbkdf2Iterations, UserKeySize = Constants.UserKeySize;
     private readonly string _authDir, _passwordFile;
     private readonly object _lock = new();
     private byte[]? _userKey;
@@ -19,8 +19,8 @@ public class PasswordService : IPasswordService
 
     public PasswordService()
     {
-        _authDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".Gyroown", "auth");
-        _passwordFile = Path.Combine(_authDir, ".gyropw");
+        _authDir = Constants.AuthDir;
+        _passwordFile = Constants.PasswordFile;
     }
 
     public byte[]? GetStoredSalt()
@@ -43,6 +43,7 @@ public class PasswordService : IPasswordService
         var credBytes = SerializeCredential(credential);
         var userKey = Rfc2898DeriveBytes.Pbkdf2(credBytes, salt, Iterations, HashAlgorithmName.SHA256, UserKeySize);
         var hash = Rfc2898DeriveBytes.Pbkdf2(userKey, salt, Iterations, HashAlgorithmName.SHA256, HashSize);
+        Array.Clear(credBytes);
         var type = GetCredentialType(credential);
         var data = new PasswordFileData { Type = type, Salt = Convert.ToBase64String(salt), Hash = Convert.ToBase64String(hash), Iterations = Iterations };
         if (type == "picture" && credential is (double, double)[] points)
@@ -94,8 +95,12 @@ public class PasswordService : IPasswordService
         var stdCredBytes = SerializeCredential(credential);
         var stdUserKey = Rfc2898DeriveBytes.Pbkdf2(stdCredBytes, salt, data.Iterations, HashAlgorithmName.SHA256, UserKeySize);
         var hash = Rfc2898DeriveBytes.Pbkdf2(stdUserKey, salt, data.Iterations, HashAlgorithmName.SHA256, HashSize);
+        Array.Clear(stdCredBytes);
         if (!CryptographicOperations.FixedTimeEquals(hash, storedHash))
+        {
+            Array.Clear(stdUserKey);
             return Task.FromResult(new PasswordValidationResult { IsValid = false, ErrorMessage = "Incorrect password." });
+        }
         lock (_lock) _userKey = stdUserKey;
         Unlocked?.Invoke(this, EventArgs.Empty);
         return Task.FromResult(new PasswordValidationResult { IsValid = true, UserKey = stdUserKey });

@@ -86,7 +86,7 @@ public class LocalizationService : ILocalizationService
             using var reader = new StreamReader(file, System.Text.Encoding.UTF8);
             return ParseIniFromReader(reader, langCode);
         }
-        catch { return null; }
+        catch (Exception ex) { LogService.Debug($"ParseIniFromFile failed for '{langCode}': {ex.Message}"); return null; }
     }
 
     private static Dictionary<string, Dictionary<string, string>>? ParseIniFromEmbedded(string langCode)
@@ -101,7 +101,7 @@ public class LocalizationService : ILocalizationService
             using var reader = new StreamReader(stream, System.Text.Encoding.UTF8);
             return ParseIniFromReader(reader, langCode);
         }
-        catch { return null; }
+        catch (Exception ex) { LogService.Debug($"ParseIniFromEmbedded failed for '{langCode}': {ex.Message}"); return null; }
     }
 
     private static Dictionary<string, Dictionary<string, string>>? ParseIniFromReader(TextReader reader, string langCode)

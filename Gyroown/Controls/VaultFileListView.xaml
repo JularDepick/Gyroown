@@ -5,9 +5,12 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="using:Gyroown.Models"
+    xmlns:local="using:Gyroown.Controls"
     mc:Ignorable="d">
 
     <UserControl.Resources>
+        <local:SearchMatchToBrushConverter x:Key="SearchMatchToBrushConverter" />
         <Style x:Key="TextBlockButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
@@ -19,90 +22,198 @@
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}"/>
         </Style>
+        <Style x:Key="CompactListViewItemStyle" TargetType="ListViewItem">
+            <Setter Property="MinHeight" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        </Style>
     </UserControl.Resources>
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto">
+    <Grid RowDefinitions="Auto,Auto,*">
         <!-- View toggle bar -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="4" Padding="8,4"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-            <ToggleButton x:Name="DetailsBtn" Width="32" Height="28" IsChecked="True" Click="OnViewChanged" Tag="details"
-                          AutomationProperties.Name="Details View"><FontIcon Glyph="&#xE8A1;" FontSize="14"/></ToggleButton>
-            <ToggleButton x:Name="IconsBtn" Width="32" Height="28" Click="OnViewChanged" Tag="icons"
-                          AutomationProperties.Name="Icons View"><FontIcon Glyph="&#xE838;" FontSize="14"/></ToggleButton>
-            <ToggleButton x:Name="TilesBtn" Width="32" Height="28" Click="OnViewChanged" Tag="tiles"
-                          AutomationProperties.Name="Tiles View"><FontIcon Glyph="&#xE8A9;" FontSize="14"/></ToggleButton>
+            <Button x:Name="ViewModeBtn" Height="28" Padding="8,2"
+                    AutomationProperties.Name="View Mode">
+                <Button.Content>
+                    <FontIcon Glyph="&#xE8A1;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
+                </Button.Content>
+                <Button.Flyout>
+                    <MenuFlyout x:Name="ViewModeFlyout">
+                        <MenuFlyoutItem x:Name="ViewDetailsItem" Text="Details" Click="OnViewModeChanged" Tag="details">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8A1;" FontFamily="Segoe MDL2 Assets" FontSize="14"/></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem x:Name="ViewLargeIconsItem" Text="Large Icons" Click="OnViewModeChanged" Tag="large">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8A9;" FontFamily="Segoe MDL2 Assets" FontSize="14"/></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem x:Name="ViewMediumIconsItem" Text="Medium Icons" Click="OnViewModeChanged" Tag="medium">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8A9;" FontFamily="Segoe MDL2 Assets" FontSize="12"/></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem x:Name="ViewSmallIconsItem" Text="Small Icons" Click="OnViewModeChanged" Tag="small">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8A9;" FontFamily="Segoe MDL2 Assets" FontSize="10"/></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem x:Name="ViewListItem" Text="List" Click="OnViewModeChanged" Tag="list">
+                            <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8A1;" FontFamily="Segoe MDL2 Assets" FontSize="14"/></MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                    </MenuFlyout>
+                </Button.Flyout>
+            </Button>
         </StackPanel>
 
-        <!-- Column headers with draggable splitters -->
+        <!-- Column headers (details view only) -->
         <Grid x:Name="HeaderRow" Grid.Row="1"
               ColumnDefinitions="24,Auto,2*,4,1*,4,1*,4,1*"
               Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
               BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,0,0,1"
-              Padding="8,0">
+              Padding="8,0"
+              RightTapped="OnHeaderRightTapped">
             <Border Grid.Column="1" Width="24" />
             <Button Grid.Column="2" x:Name="SortName" Click="SortByName"
                     Style="{StaticResource TextBlockButtonStyle}" HorizontalAlignment="Stretch" Margin="4,4,0,4" />
             <Border Grid.Column="3" x:Name="Split1" Background="Transparent"
-                    PointerPressed="OnSplitterPressed" PointerMoved="OnSplitterMoved" PointerReleased="OnSplitterReleased" />
+                    PointerPressed="OnSplitterPressed" PointerMoved="OnSplitterMoved" PointerReleased="OnSplitterReleased"
+                    DoubleTapped="OnSplitterDoubleTapped" />
             <Button Grid.Column="4" x:Name="SortSize" Click="SortBySize"
                     Style="{StaticResource TextBlockButtonStyle}" HorizontalAlignment="Stretch" Margin="4" MinWidth="60" />
             <Border Grid.Column="5" x:Name="Split2" Background="Transparent"
-                    PointerPressed="OnSplitterPressed" PointerMoved="OnSplitterMoved" PointerReleased="OnSplitterReleased" />
+                    PointerPressed="OnSplitterPressed" PointerMoved="OnSplitterMoved" PointerReleased="OnSplitterReleased"
+                    DoubleTapped="OnSplitterDoubleTapped" />
             <Button Grid.Column="6" x:Name="SortType" Click="SortByType"
                     Style="{StaticResource TextBlockButtonStyle}" HorizontalAlignment="Stretch" Margin="4" MinWidth="60" />
             <Border Grid.Column="7" x:Name="Split3" Background="Transparent"
-                    PointerPressed="OnSplitterPressed" PointerMoved="OnSplitterMoved" PointerReleased="OnSplitterReleased" />
+                    PointerPressed="OnSplitterPressed" PointerMoved="OnSplitterMoved" PointerReleased="OnSplitterReleased"
+                    DoubleTapped="OnSplitterDoubleTapped" />
             <Button Grid.Column="8" x:Name="SortDate" Click="SortByDate"
                     Style="{StaticResource TextBlockButtonStyle}" HorizontalAlignment="Stretch" Margin="4" MinWidth="80" />
         </Grid>
 
-        <!-- Details view -->
-        <ListView Grid.Row="2" x:Name="FileList" SelectionMode="Extended"
-                  AllowDrop="True" CanDragItems="True"
-                  DragItemsStarting="OnDragStart" DragOver="OnDragOver" Drop="OnDrop"
-                  DoubleTapped="OnDoubleTap" Tapped="OnEmptyTap" KeyDown="OnListKeyDown"
-                  SelectionChanged="OnSelectionChanged"
-                  >
-            <ListView.ItemTemplate>
-                <DataTemplate>
-                    <Grid ColumnDefinitions="Auto,2*,1*,1*,1*" Padding="8,4" RightTapped="OnItemRightTap">
-                        <FontIcon Grid.Column="0" Glyph="{Binding IconGlyph}" FontSize="16" Margin="0,0,8,0" />
-                        <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Grid.Column="2" Text="{Binding FormattedSize}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" Margin="12,0" />
-                        <TextBlock Grid.Column="3" Text="{Binding ContentType}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" Margin="12,0" />
-                        <TextBlock Grid.Column="4" Text="{Binding ModifiedAt}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
-                    </Grid>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
+        <!-- Content area -->
+        <Grid Grid.Row="2">
+            <!-- Rubber band selection overlay -->
+            <Canvas x:Name="RubberBandCanvas" Visibility="Collapsed"
+                    Background="Transparent"
+                    PointerPressed="OnRubberBandPressed"
+                    PointerMoved="OnRubberBandMoved"
+                    PointerReleased="OnRubberBandReleased"
+                    Canvas.ZIndex="10" />
 
-        <!-- Icons/Tiles view -->
-        <GridView Grid.Row="2" x:Name="FileGrid" SelectionMode="Extended"
-                  AllowDrop="True" CanDragItems="True" Visibility="Collapsed"
-                  DragItemsStarting="OnDragStart" DragOver="OnDragOver" Drop="OnDrop"
-                  DoubleTapped="OnDoubleTap" Tapped="OnEmptyTap" KeyDown="OnListKeyDown"
-                  SelectionChanged="OnSelectionChanged"
-                  >
-            <GridView.ItemTemplate>
-                <DataTemplate>
-                    <StackPanel Width="100" Spacing="4" Padding="8" RightTapped="OnItemRightTap">
-                        <Border Width="60" Height="60" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="4">
-                            <Grid>
-                                <FontIcon Glyph="{Binding IconGlyph}" FontSize="28" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                <Image Source="{Binding PreviewImage}" Stretch="UniformToFill" />
-                            </Grid>
-                        </Border>
-                        <TextBlock Text="{Binding Name}" Style="{StaticResource CaptionTextBlockStyle}" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="90" />
-                    </StackPanel>
-                </DataTemplate>
-            </GridView.ItemTemplate>
-        </GridView>
-        <!-- Empty state for search -->
-        <StackPanel Grid.Row="2" x:Name="EmptyState" Visibility="Collapsed"
-                    HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-            <FontIcon Glyph="&#xE721;" FontSize="32" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-            <TextBlock x:Name="EmptyStateText" Style="{StaticResource BodyTextBlockStyle}"
-                       Foreground="{ThemeResource TextFillColorTertiaryBrush}" HorizontalAlignment="Center" />
-        </StackPanel>
+            <!-- Details view -->
+            <ListView x:Name="FileList" SelectionMode="Extended"
+                      AllowDrop="True" CanDragItems="True"
+                      DragItemsStarting="OnDragStart" DragOver="OnDragOver" Drop="OnDrop"
+                      DoubleTapped="OnDoubleTap" Tapped="OnListTapped"
+                      RightTapped="OnListRightTapped" KeyDown="OnListKeyDown"
+                      SelectionChanged="OnSelectionChanged"
+                      ItemContainerStyle="{StaticResource CompactListViewItemStyle}">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="models:VaultFileItem">
+                        <Grid ColumnDefinitions="Auto,2*,1*,1*,1*" Padding="8,2"
+                              Background="{x:Bind IsSearchMatch, Converter={StaticResource SearchMatchToBrushConverter}, Mode=OneWay}">
+                            <FontIcon Grid.Column="0" Glyph="{x:Bind IconGlyph}" FontFamily="Segoe MDL2 Assets" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="{x:Bind Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="2" Text="{x:Bind FormattedSize}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" Margin="12,0" />
+                            <TextBlock Grid.Column="3" Text="{x:Bind ContentType}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" Margin="12,0" />
+                            <TextBlock Grid.Column="4" Text="{x:Bind ModifiedAt}" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <!-- Icons view (large tiles with name below) -->
+            <GridView x:Name="FileGrid" SelectionMode="Extended"
+                      AllowDrop="True" CanDragItems="True" Visibility="Collapsed"
+                      DragItemsStarting="OnDragStart" DragOver="OnDragOver" Drop="OnDrop"
+                      DoubleTapped="OnDoubleTap" Tapped="OnListTapped"
+                      RightTapped="OnListRightTapped" KeyDown="OnListKeyDown"
+                      SelectionChanged="OnSelectionChanged">
+                <GridView.ItemTemplate>
+                    <DataTemplate x:DataType="models:VaultFileItem">
+                        <StackPanel Width="100" Spacing="4" Padding="8">
+                            <Border Width="60" Height="60" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="4">
+                                <Grid>
+                                    <FontIcon Glyph="{x:Bind IconGlyph}" FontFamily="Segoe MDL2 Assets" FontSize="28" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Image Source="{x:Bind PreviewImage}" Stretch="UniformToFill" />
+                                </Grid>
+                            </Border>
+                            <TextBlock Text="{x:Bind Name}" Style="{StaticResource CaptionTextBlockStyle}" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" MaxLines="2" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </DataTemplate>
+                </GridView.ItemTemplate>
+            </GridView>
+
+            <!-- Medium icons view -->
+            <GridView x:Name="FileGridMedium" SelectionMode="Extended"
+                      AllowDrop="True" CanDragItems="True" Visibility="Collapsed"
+                      DragItemsStarting="OnDragStart" DragOver="OnDragOver" Drop="OnDrop"
+                      DoubleTapped="OnDoubleTap" Tapped="OnListTapped"
+                      RightTapped="OnListRightTapped" KeyDown="OnListKeyDown"
+                      SelectionChanged="OnSelectionChanged">
+                <GridView.ItemTemplate>
+                    <DataTemplate x:DataType="models:VaultFileItem">
+                        <StackPanel Width="70" Spacing="2" Padding="4">
+                            <Border Width="40" Height="40" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="4">
+                                <Grid>
+                                    <FontIcon Glyph="{x:Bind IconGlyph}" FontFamily="Segoe MDL2 Assets" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Image Source="{x:Bind PreviewImage}" Stretch="UniformToFill" />
+                                </Grid>
+                            </Border>
+                            <TextBlock Text="{x:Bind Name}" Style="{StaticResource CaptionTextBlockStyle}" FontSize="11" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" MaxLines="2" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </DataTemplate>
+                </GridView.ItemTemplate>
+            </GridView>
+
+            <!-- Small icons view -->
+            <GridView x:Name="FileGridSmall" SelectionMode="Extended"
+                      AllowDrop="True" CanDragItems="True" Visibility="Collapsed"
+                      DragItemsStarting="OnDragStart" DragOver="OnDragOver" Drop="OnDrop"
+                      DoubleTapped="OnDoubleTap" Tapped="OnListTapped"
+                      RightTapped="OnListRightTapped" KeyDown="OnListKeyDown"
+                      SelectionChanged="OnSelectionChanged">
+                <GridView.ItemTemplate>
+                    <DataTemplate x:DataType="models:VaultFileItem">
+                        <StackPanel Width="50" Spacing="2" Padding="2">
+                            <Border Width="24" Height="24" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="2">
+                                <FontIcon Glyph="{x:Bind IconGlyph}" FontFamily="Segoe MDL2 Assets" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <TextBlock Text="{x:Bind Name}" Style="{StaticResource CaptionTextBlockStyle}" FontSize="10" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </DataTemplate>
+                </GridView.ItemTemplate>
+            </GridView>
+
+            <!-- List view (compact horizontal) -->
+            <ListView x:Name="FileListCompact" SelectionMode="Extended"
+                      AllowDrop="True" CanDragItems="True" Visibility="Collapsed"
+                      DragItemsStarting="OnDragStart" DragOver="OnDragOver" Drop="OnDrop"
+                      DoubleTapped="OnDoubleTap" Tapped="OnListTapped"
+                      RightTapped="OnListRightTapped" KeyDown="OnListKeyDown"
+                      SelectionChanged="OnSelectionChanged">
+                <ListView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <ItemsStackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ListView.ItemsPanel>
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="models:VaultFileItem">
+                        <StackPanel Width="60" Spacing="2" Padding="4" HorizontalAlignment="Center">
+                            <FontIcon Glyph="{x:Bind IconGlyph}" FontFamily="Segoe MDL2 Assets" FontSize="16" HorizontalAlignment="Center" />
+                            <TextBlock Text="{x:Bind Name}" Style="{StaticResource CaptionTextBlockStyle}" FontSize="10" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <!-- Empty state -->
+            <StackPanel x:Name="EmptyState" Visibility="Collapsed"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+                <FontIcon Glyph="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="32" Foreground="{ThemeResource TextFillColorTertiaryBrush}" HorizontalAlignment="Center" />
+                <TextBlock x:Name="EmptyStateText" Style="{StaticResource BodyTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="300" />
+                <Button x:Name="ClearFiltersBtn" Content="Clear Filters" Click="OnClearFilters"
+                        Visibility="Collapsed" HorizontalAlignment="Center" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </UserControl>

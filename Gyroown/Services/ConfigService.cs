@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.Json;
 
 namespace Gyroown.Services;
@@ -19,14 +19,18 @@ public class ConfigService
 
     public ConfigService()
     {
-        _configPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".Gyroown", "config.gyrojson");
+        _configPath = Constants.ConfigFile;
     }
 
     public void Initialize(byte[] vaultKey)
     {
         _vaultKey = vaultKey;
+    }
+
+    /// <summary>Clear vault key from memory.</summary>
+    public void ClearKey()
+    {
+        if (_vaultKey != null) { Array.Clear(_vaultKey); _vaultKey = null; }
     }
 
     public CoreConfig Load()

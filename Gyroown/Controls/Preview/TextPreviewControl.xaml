@@ -19,7 +19,7 @@
             <ToggleButton Grid.Column="3" x:Name="WrapToggle" Checked="OnWrapToggled" Unchecked="OnWrapToggled"
                           IsChecked="True" Height="28" Padding="8,0" FontSize="12">
                 <StackPanel Orientation="Horizontal" Spacing="4">
-                    <FontIcon Glyph="&#xE73B;" FontSize="13" />
+                    <FontIcon Glyph="&#xE73B;" FontFamily="Segoe MDL2 Assets" FontSize="13" />
                     <TextBlock x:Name="WrapLabel" VerticalAlignment="Center" FontSize="11" />
                 </StackPanel>
             </ToggleButton>

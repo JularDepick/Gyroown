@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -6,8 +6,8 @@ namespace Gyroown.Services;
 
 public class EncryptionService : IEncryptionService
 {
-    private const int AesKeySize = 32, AesNonceSize = 12, AesTagSize = 16, RsaKeySize = 2048;
-    private const int Pbkdf2Iterations = 100_000, UserKeySize = 32;
+    private const int AesKeySize = Constants.AesKeySize, AesNonceSize = Constants.AesNonceSize, AesTagSize = Constants.AesTagSize, RsaKeySize = Constants.RsaKeySize;
+    private const int Pbkdf2Iterations = Constants.Pbkdf2Iterations, UserKeySize = Constants.UserKeySize;
 
     public byte[] DeriveUserKey(string p, byte[] s) =>
         Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(p), s, Pbkdf2Iterations, HashAlgorithmName.SHA256, UserKeySize);
@@ -30,21 +30,25 @@ public class EncryptionService : IEncryptionService
         using var rsa = RSA.Create(RsaKeySize); rsa.ImportRSAPrivateKey(privateKey, out _);
         var aesKey = RandomNumberGenerator.GetBytes(AesKeySize);
         var aesNonce = RandomNumberGenerator.GetBytes(AesNonceSize);
-        // AES-GCM encrypt
-        var cipher = new byte[plainData.Length + AesTagSize];
-        using var aes = new AesGcm(aesKey, AesTagSize);
-        aes.Encrypt(aesNonce, plainData, cipher.AsSpan(0, plainData.Length), cipher.AsSpan(plainData.Length, AesTagSize));
-        // RSA encrypt header
-        var hdr = new BlobHeader { AesKey = Convert.ToBase64String(aesKey), AesNonce = Convert.ToBase64String(aesNonce), OriginalLength = plainData.Length };
-        var hdrJson = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(hdr, JsonConfig.Options));
-        var hdrEnc = rsa.Encrypt(hdrJson, RSAEncryptionPadding.OaepSHA256);
-        // Write: [4B headerLen][header][4B bodyLen][body]
-        var result = new byte[4 + hdrEnc.Length + 4 + cipher.Length];
-        BitConverter.GetBytes(hdrEnc.Length).CopyTo(result, 0);
-        hdrEnc.CopyTo(result, 4);
-        BitConverter.GetBytes(cipher.Length).CopyTo(result, 4 + hdrEnc.Length);
-        cipher.CopyTo(result, 8 + hdrEnc.Length);
-        return result;
+        try
+        {
+            // AES-GCM encrypt
+            var cipher = new byte[plainData.Length + AesTagSize];
+            using var aes = new AesGcm(aesKey, AesTagSize);
+            aes.Encrypt(aesNonce, plainData, cipher.AsSpan(0, plainData.Length), cipher.AsSpan(plainData.Length, AesTagSize));
+            // RSA encrypt header
+            var hdr = new BlobHeader { AesKey = Convert.ToBase64String(aesKey), AesNonce = Convert.ToBase64String(aesNonce), OriginalLength = plainData.Length };
+            var hdrJson = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(hdr, JsonConfig.Options));
+            var hdrEnc = rsa.Encrypt(hdrJson, RSAEncryptionPadding.OaepSHA256);
+            // Write: [4B headerLen][header][4B bodyLen][body]
+            var result = new byte[4 + hdrEnc.Length + 4 + cipher.Length];
+            BitConverter.GetBytes(hdrEnc.Length).CopyTo(result, 0);
+            hdrEnc.CopyTo(result, 4);
+            BitConverter.GetBytes(cipher.Length).CopyTo(result, 4 + hdrEnc.Length);
+            cipher.CopyTo(result, 8 + hdrEnc.Length);
+            return result;
+        }
+        finally { Array.Clear(aesKey); Array.Clear(aesNonce); }
     }
 
     public byte[] DecryptBlob(byte[] encryptedBlob, byte[] privateKey)
@@ -67,11 +71,15 @@ public class EncryptionService : IEncryptionService
             ?? throw new CryptographicException("Corrupted encrypted blob: invalid header JSON");
         var aesKey = Convert.FromBase64String(hdr.AesKey);
         var aesNonce = Convert.FromBase64String(hdr.AesNonce);
-        // AES-GCM decrypt
-        var plain = new byte[cipher.Length - AesTagSize];
-        using var aes = new AesGcm(aesKey, AesTagSize);
-        aes.Decrypt(aesNonce, cipher.AsSpan(0, plain.Length), cipher.AsSpan(plain.Length, AesTagSize), plain);
-        return plain;
+        try
+        {
+            // AES-GCM decrypt
+            var plain = new byte[cipher.Length - AesTagSize];
+            using var aes = new AesGcm(aesKey, AesTagSize);
+            aes.Decrypt(aesNonce, cipher.AsSpan(0, plain.Length), cipher.AsSpan(plain.Length, AesTagSize), plain);
+            return plain;
+        }
+        finally { Array.Clear(aesKey); Array.Clear(aesNonce); }
     }
 
     // ── Stream-based interface (keeps public API compatible) ──

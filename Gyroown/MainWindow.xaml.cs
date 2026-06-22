@@ -1,9 +1,10 @@
-﻿using Microsoft.UI;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
+using Microsoft.UI.Xaml.Automation;
 using Gyroown.Views;
 using Gyroown.Controls.Preview;
 using Gyroown.Services;
@@ -30,6 +31,10 @@ public sealed partial class MainWindow : Window
     private Window? _previewWindow;
     private readonly List<IntegrityIssue> _integrityIssues = new();
 
+    // Navigation history (back/forward)
+    private readonly List<string> _navHistory = new() { "/" };
+    private int _navIndex = 0;
+
     enum IntegrityIssueType { OrphanMeta, OrphanData, Undecryptable, Unbound }
     record IntegrityIssue(IntegrityIssueType Type, string Id, string Description);
 
@@ -52,7 +57,7 @@ public sealed partial class MainWindow : Window
             if (!File.Exists(iconPath)) iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "favicon.ico");
             if (File.Exists(iconPath)) AppWindow.SetIcon(iconPath);
         }
-        catch { }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"SetIcon failed: {ex.Message}"); }
         Activated += (_, _) =>
         {
             SetTitleBar(TitleBar.GetDragElement());
@@ -66,8 +71,20 @@ public sealed partial class MainWindow : Window
         };
         InitTray();
 
-        // Intercept close �?minimize to tray
-        AppWindow.Closing += (_, e) => { if (_busy) { e.Cancel = true; return; } e.Cancel = true; ShowWindow(Hwnd, SW_HIDE); };
+        // Intercept close → lock & minimize to tray
+        AppWindow.Closing += (_, e) =>
+        {
+            if (_busy) { e.Cancel = true; return; }
+            e.Cancel = true;
+            if (!_pw.IsLocked && _vault.IsInitialized)
+            {
+                _vault.ClearKeys();
+                _pw.Lock();
+                AuthOverlay.Visibility = Visibility.Visible;
+                VaultContent.Visibility = Visibility.Collapsed;
+            }
+            ShowWindow(Hwnd, SW_HIDE);
+        };
 
         // Window size: default 1600×960, minimum 800×480
         var minW = 800; var minH = 480;
@@ -82,6 +99,10 @@ public sealed partial class MainWindow : Window
         // Subscribe events once (not in ApplyToolbarLoc which re-runs on language change)
         FileList.ItemOpened += OnFileOpened;
         FileList.RenameRequested += OnRenameRequested;
+        FileList.InlineRenameRequested += OnInlineRenameRequested;
+        FileList.PropertiesRequested += (_, item) => ShowFileProperties(item);
+        FileList.NewFolderRequested += (_, _) => OnNewFolderCmd(null!, null!);
+        FileList.RefreshRequested += (_, _) => RefreshList();
         TitleBar.SearchChanged += q => FileList.Filter = q;
         TitleBar.FilterChanged += filter => FileList.SearchFilter = filter;
         TitleBar.RefreshRequested += (_, _) => RefreshList();
@@ -89,8 +110,20 @@ public sealed partial class MainWindow : Window
         TitleBar.SettingsRequested += (_, _) => OnSettingsCmd(null!, null!);
         Sidebar.FolderSelected += (_, path) =>
         {
-            _vault.SetCurrentPath(path);
-            RefreshList();
+            NavigateTo(path);
+        };
+        Sidebar.RecentFileOpened += (_, item) =>
+        {
+            if (item.IsFolder)
+                NavigateTo(item.VirtualPath);
+            else
+                _ = OpenViewer(item);
+        };
+        Sidebar.FileDropToFolder += (_, e) =>
+        {
+            // Handle file drop to sidebar folder (move file)
+            // This is triggered when user drags a file from the list to a sidebar folder
+            // The actual move is handled by the file list's drag system
         };
         FileList.DecryptToFile = async (id, path) =>
         {
@@ -141,6 +174,8 @@ public sealed partial class MainWindow : Window
         };
         FileList.FavoriteToggleRequested += OnFavoriteToggle;
         FileList.VersionHistoryRequested += OnVersionHistoryRequested;
+        StatusBar.ViewDetailsRequested += (_, _) => FileList.SwitchToView("details");
+        StatusBar.ViewIconsRequested += (_, _) => FileList.SwitchToView("large");
 
         ApplyToolbarLoc(); ApplySettingsLoc();
         Loc.LanguageChanged += (_, _) => { ApplyToolbarLoc(); ApplySettingsLoc(); };
@@ -173,28 +208,67 @@ public sealed partial class MainWindow : Window
 
     void SetupKeyboardShortcuts()
     {
-        // Ctrl+F → Focus search
-        var accelF = new Microsoft.UI.Xaml.Input.KeyboardAccelerator { Key = Windows.System.VirtualKey.F, Modifiers = Windows.System.VirtualKeyModifiers.Control };
-        accelF.Invoked += (_, _) => TitleBar.FocusSearch();
-        Content.KeyboardAccelerators.Add(accelF);
-
-        // Ctrl+A → Select all
-        var accelA = new Microsoft.UI.Xaml.Input.KeyboardAccelerator { Key = Windows.System.VirtualKey.A, Modifiers = Windows.System.VirtualKeyModifiers.Control };
-        accelA.Invoked += (_, _) => FileList.SelectAll();
-        Content.KeyboardAccelerators.Add(accelA);
+        // Keyboard shortcuts handled in PreviewKeyDown to avoid auto-generated tooltips
 
         // Enter and Backspace via PreviewKeyDown on content
         Content.PreviewKeyDown += OnPreviewKeyDown;
     }
 
+    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vKey);
+    static bool IsCtrlPressed() => (GetAsyncKeyState(0x11) & 0x8000) != 0; // VK_CONTROL
+    static bool IsAltPressed() => (GetAsyncKeyState(0x12) & 0x8000) != 0; // VK_MENU
+
     void OnPreviewKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
     {
         ResetAutoLockTimer();
+
+        // Ctrl+F → Focus search (always, even in text inputs)
+        if (e.Key == Windows.System.VirtualKey.F && IsCtrlPressed() && e.OriginalSource is not AutoSuggestBox)
+        {
+            TitleBar.FocusSearch();
+            e.Handled = true;
+            return;
+        }
+
+        // Alt+Left → Navigate back
+        if (e.Key == Windows.System.VirtualKey.Left && IsAltPressed())
+        {
+            OnNavBack(null!, null!);
+            e.Handled = true;
+            return;
+        }
+        // Alt+Right → Navigate forward
+        if (e.Key == Windows.System.VirtualKey.Right && IsAltPressed())
+        {
+            OnNavForward(null!, null!);
+            e.Handled = true;
+            return;
+        }
+        // Alt+Up → Navigate to parent
+        if (e.Key == Windows.System.VirtualKey.Up && IsAltPressed())
+        {
+            GoToParent();
+            e.Handled = true;
+            return;
+        }
+
         // Skip if a text input is focused
         var focused = FocusManager.GetFocusedElement(Content.XamlRoot);
         if (focused is TextBox || focused is PasswordBox || focused is AutoSuggestBox) return;
 
-        if (e.Key == Windows.System.VirtualKey.Enter)
+        if (e.Key == Windows.System.VirtualKey.A && IsCtrlPressed())
+        {
+            FileList.SelectAll();
+            e.Handled = true;
+        }
+        // Alt+Enter → File properties
+        else if (e.Key == Windows.System.VirtualKey.Enter && IsAltPressed())
+        {
+            var sel = FileList.SelectedItems;
+            if (sel.Count == 1) ShowFileProperties(sel[0]);
+            e.Handled = true;
+        }
+        else if (e.Key == Windows.System.VirtualKey.Enter)
         {
             // Open selected item
             var sel = FileList.SelectedItems;
@@ -207,6 +281,21 @@ public sealed partial class MainWindow : Window
             GoToParent();
             e.Handled = true;
         }
+        else if (e.Key == Windows.System.VirtualKey.F5)
+        {
+            RefreshList();
+            e.Handled = true;
+        }
+        else if (e.Key == Windows.System.VirtualKey.Home)
+        {
+            FileList.FocusFirstItem();
+            e.Handled = true;
+        }
+        else if (e.Key == Windows.System.VirtualKey.End)
+        {
+            FileList.FocusLastItem();
+            e.Handled = true;
+        }
     }
 
     void GoToParent()
@@ -215,8 +304,85 @@ public sealed partial class MainWindow : Window
         if (current == "/") return;
         var parent = System.IO.Path.GetDirectoryName(current.Replace('\\', '/'))?.Replace('\\', '/') ?? "/";
         if (string.IsNullOrEmpty(parent)) parent = "/";
-        _vault.SetCurrentPath(parent);
+        NavigateTo(parent);
+    }
+
+    // ── Navigation history ──
+
+    void NavigateTo(string path, bool addToHistory = true)
+    {
+        path = path.Replace('\\', '/');
+        if (string.IsNullOrEmpty(path)) path = "/";
+        if (addToHistory && _vault.CurrentPath != path)
+        {
+            // Trim forward history when navigating to a new path
+            if (_navIndex < _navHistory.Count - 1)
+                _navHistory.RemoveRange(_navIndex + 1, _navHistory.Count - _navIndex - 1);
+            _navHistory.Add(path);
+            _navIndex = _navHistory.Count - 1;
+        }
+        _vault.SetCurrentPath(path);
         RefreshList();
+        UpdateNavButtons();
+    }
+
+    void OnNavBack(object s, RoutedEventArgs e)
+    {
+        if (_navIndex <= 0) return;
+        _navIndex--;
+        NavigateTo(_navHistory[_navIndex], addToHistory: false);
+    }
+
+    void OnNavForward(object s, RoutedEventArgs e)
+    {
+        if (_navIndex >= _navHistory.Count - 1) return;
+        _navIndex++;
+        NavigateTo(_navHistory[_navIndex], addToHistory: false);
+    }
+
+    void OnNavUp(object s, RoutedEventArgs e) => GoToParent();
+
+    void UpdateNavButtons()
+    {
+        NavBackBtn.IsEnabled = _navIndex > 0;
+        NavForwardBtn.IsEnabled = _navIndex < _navHistory.Count - 1;
+        NavUpBtn.IsEnabled = _vault.CurrentPath != "/";
+    }
+
+    void UpdateBreadcrumb()
+    {
+        var path = _vault.CurrentPath;
+        if (string.IsNullOrEmpty(path) || path == "/")
+        {
+            PathBreadcrumb.ItemsSource = new[] { Services.Loc.Get("Sidebar", "Vault") };
+            return;
+        }
+        var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var crumbs = new List<string> { Services.Loc.Get("Sidebar", "Vault") };
+        crumbs.AddRange(parts);
+        PathBreadcrumb.ItemsSource = crumbs;
+    }
+
+    void OnBreadcrumbItemClicked(Microsoft.UI.Xaml.Controls.BreadcrumbBar sender, Microsoft.UI.Xaml.Controls.BreadcrumbBarItemClickedEventArgs args)
+    {
+        var crumbs = args.Item as string;
+        if (crumbs == null) return;
+        var items = PathBreadcrumb.ItemsSource as IList<string>;
+        if (items == null) return;
+
+        // Last item is current folder — ignore click
+        if (args.Index >= items.Count - 1) return;
+
+        // Build path from clicked index
+        if (args.Index == 0)
+        {
+            NavigateTo("/");
+        }
+        else
+        {
+            var pathParts = items.Skip(1).Take(args.Index).ToList();
+            NavigateTo("/" + string.Join("/", pathParts));
+        }
     }
 
     // AutoLock
@@ -266,7 +432,9 @@ public sealed partial class MainWindow : Window
     {
         _autoLockTimer?.Stop();
         if (_pw.IsLocked || _busy) { ResetAutoLockTimer(); return; }
+        _vault.ClearKeys();
         _pw.Lock();
+        StatusBar.SetLocked(true);
         AuthOverlay.Visibility = Visibility.Visible;
         VaultContent.Visibility = Visibility.Collapsed;
         ShowUnlock();
@@ -303,23 +471,41 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
-            // Build right-click context menu
-            var menu = new Microsoft.UI.Xaml.Controls.MenuFlyout();
-            var openItem = new Microsoft.UI.Xaml.Controls.MenuFlyoutItem { Text = Loc.Get("Tray", "Open") };
-            openItem.Click += (_, _) => RestoreFromTray();
-            var exitItem = new Microsoft.UI.Xaml.Controls.MenuFlyoutItem { Text = Loc.Get("Tray", "Exit") };
-            exitItem.Click += (_, _) => { _tray?.Dispose(); Application.Current.Exit(); };
-            menu.Items.Add(openItem);
-            menu.Items.Add(exitItem);
+            const uint CMD_OPEN = 1001, CMD_LOCK = 1002, CMD_EXIT = 1003;
+            const uint MF_STRING = 0x00000000, MF_GRAYED = 0x00000001;
+            const uint TPM_RIGHTBUTTON = 0x0002, TPM_BOTTOMALIGN = 0x0020, TPM_RETURNCMD = 0x0100;
 
             _tray = new H.NotifyIcon.TaskbarIcon { ToolTipText = "Gyroown", Icon = icon };
             _tray.LeftClickCommand = new TrayCommand(() => RestoreFromTray());
             _tray.RightClickCommand = new TrayCommand(() =>
             {
-                // Show context menu at cursor position
                 GetCursorPos(out var pt);
-                menu.XamlRoot = Content.XamlRoot;
-                menu.ShowAt(Content, new Windows.Foundation.Point(pt.X, pt.Y));
+                SetForegroundWindow(Hwnd);
+
+                var hMenu = CreatePopupMenu();
+                AppendMenuW(hMenu, MF_STRING, CMD_OPEN, Loc.Get("Tray", "Open"));
+                var lockFlags = (_pw.IsLocked || !_vault.IsInitialized) ? MF_STRING | MF_GRAYED : MF_STRING;
+                AppendMenuW(hMenu, lockFlags, CMD_LOCK, Loc.Get("Tray", "Lock"));
+                AppendMenuW(hMenu, MF_STRING, CMD_EXIT, Loc.Get("Tray", "Exit"));
+
+                var cmd = TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_BOTTOMALIGN | TPM_RETURNCMD, pt.X, pt.Y, 0, Hwnd, IntPtr.Zero);
+                DestroyMenu(hMenu);
+
+                switch (cmd)
+                {
+                    case CMD_OPEN: RestoreFromTray(); break;
+                    case CMD_LOCK:
+                        if (!_pw.IsLocked && _vault.IsInitialized)
+                        {
+                            _vault.ClearKeys();
+                            _pw.Lock();
+                            AuthOverlay.Visibility = Visibility.Visible;
+                            VaultContent.Visibility = Visibility.Collapsed;
+                            ShowUnlock();
+                        }
+                        break;
+                    case CMD_EXIT: _tray?.Dispose(); Application.Current.Exit(); break;
+                }
             });
 
             // TaskbarIcon must be in the visual tree to initialize
@@ -341,13 +527,23 @@ public sealed partial class MainWindow : Window
     [DllImport("user32.dll")] private static extern bool DestroyIcon(IntPtr handle);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT lpPoint);
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern IntPtr CreatePopupMenu();
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool AppendMenuW(IntPtr hMenu, uint uFlags, uint uIDNewItem, string lpNewItem);
+    [DllImport("user32.dll")] private static extern uint TrackPopupMenu(IntPtr hMenu, uint uFlags, int x, int y, int nReserved, IntPtr hWnd, IntPtr prcRect);
+    [DllImport("user32.dll")] private static extern bool DestroyMenu(IntPtr hMenu);
     [StructLayout(LayoutKind.Sequential)] struct POINT { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
 
     private class TrayCommand : System.Windows.Input.ICommand
     {
         private readonly Action _execute;
         public TrayCommand(Action execute) => _execute = execute;
+#pragma warning disable CS0067 // Event never raised; CanExecute always returns true
         public event EventHandler? CanExecuteChanged;
+#pragma warning restore CS0067
         public bool CanExecute(object? parameter) => true;
         public void Execute(object? parameter) => _execute();
     }
@@ -368,7 +564,7 @@ public sealed partial class MainWindow : Window
         {
             System.Diagnostics.Debug.WriteLine($"InitializeAuthFlow failed: {ex}");
             // Fallback: show setup if possible, otherwise the user sees the auth overlay
-            try { if (!_pw.IsPasswordSet) ShowSetup(); } catch { }
+            try { if (!_pw.IsPasswordSet) ShowSetup(); } catch (Exception ex2) { System.Diagnostics.Debug.WriteLine($"AuthFlow fallback failed: {ex2.Message}"); }
         }
     }
 
@@ -426,9 +622,83 @@ public sealed partial class MainWindow : Window
 
     void ShowSetup()
     {
-        _setupControl = new PasswordSetupControl(_pw);
-        _setupControl.SetupCompleted += async (_, cred) => await FinalizeSetup(cred);
-        AuthHost.Content = _setupControl;
+        // Show welcome guide first, then proceed to password setup
+        var welcomePanel = new StackPanel { Spacing = 16, MaxWidth = 400, HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center };
+
+        var welcomeIcon = new FontIcon
+        {
+            Glyph = "\uE8E3",
+            FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe MDL2 Assets"),
+            FontSize = 48,
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AccentFillColorDefaultBrush"],
+            HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center
+        };
+
+        var welcomeTitle = new TextBlock
+        {
+            Text = Loc.Get("MainWindow", "WelcomeTitle"),
+            Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"],
+            HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center,
+            TextAlignment = Microsoft.UI.Xaml.TextAlignment.Center
+        };
+
+        var welcomeDesc = new TextBlock
+        {
+            Text = Loc.Get("MainWindow", "WelcomeDesc"),
+            TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
+            HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center,
+            TextAlignment = Microsoft.UI.Xaml.TextAlignment.Center,
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
+        };
+
+        var stepsPanel = new StackPanel { Spacing = 8 };
+        var steps = new[]
+        {
+            (Loc.Get("MainWindow", "WelcomeStep1"), "\uE8D7"),
+            (Loc.Get("MainWindow", "WelcomeStep2"), "\uE8B5"),
+            (Loc.Get("MainWindow", "WelcomeStep3"), "\uE715")
+        };
+        foreach (var (text, glyph) in steps)
+        {
+            var stepPanel = new StackPanel { Orientation = Microsoft.UI.Xaml.Controls.Orientation.Horizontal, Spacing = 12 };
+            stepPanel.Children.Add(new FontIcon
+            {
+                Glyph = glyph,
+                FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe MDL2 Assets"),
+                FontSize = 20,
+                VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
+                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AccentFillColorDefaultBrush"]
+            });
+            stepPanel.Children.Add(new TextBlock
+            {
+                Text = text,
+                VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap
+            });
+            stepsPanel.Children.Add(stepPanel);
+        }
+
+        var startBtn = new Button
+        {
+            Content = Loc.Get("MainWindow", "WelcomeStart"),
+            HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center,
+            Style = (Style)Application.Current.Resources["AccentButtonStyle"]
+        };
+        startBtn.Click += (_, _) =>
+        {
+            // Proceed to actual password setup
+            _setupControl = new PasswordSetupControl(_pw);
+            _setupControl.SetupCompleted += async (_, cred) => await FinalizeSetup(cred);
+            AuthHost.Content = _setupControl;
+        };
+
+        welcomePanel.Children.Add(welcomeIcon);
+        welcomePanel.Children.Add(welcomeTitle);
+        welcomePanel.Children.Add(welcomeDesc);
+        welcomePanel.Children.Add(stepsPanel);
+        welcomePanel.Children.Add(startBtn);
+
+        AuthHost.Content = welcomePanel;
     }
 
     async Task FinalizeSetup(object cred)
@@ -460,6 +730,7 @@ public sealed partial class MainWindow : Window
         LoadAutoLockFromConfig();
         AuthOverlay.Visibility = Visibility.Collapsed;
         VaultContent.Visibility = Visibility.Visible;
+        StatusBar.SetLocked(false);
         RefreshList();
         _ = RunIntegrityCheck();
     }
@@ -489,13 +760,14 @@ public sealed partial class MainWindow : Window
             LoadAutoLockFromConfig();
             AuthOverlay.Visibility = Visibility.Collapsed;
             VaultContent.Visibility = Visibility.Visible;
+            StatusBar.SetLocked(false);
             RefreshList();
             _ = RunIntegrityCheck();
         };
         AuthHost.Content = c;
     }
 
-    void ShowVault() { AuthOverlay.Visibility = Visibility.Collapsed; VaultContent.Visibility = Visibility.Visible; RefreshList(); InitChunkSlider(); _ = RunIntegrityCheck(); }
+    void ShowVault() { AuthOverlay.Visibility = Visibility.Collapsed; VaultContent.Visibility = Visibility.Visible; StatusBar.SetLocked(false); RefreshList(); InitChunkSlider(); _ = RunIntegrityCheck(); }
 
     async Task RunIntegrityCheck()
     {
@@ -564,10 +836,24 @@ public sealed partial class MainWindow : Window
     void ApplyToolbarLoc()
     {
         BtnNewFolder.Label = Loc.Get("MainWindow", "NewFolder"); BtnImport.Label = Loc.Get("MainWindow", "Import");
+        BtnImportFolder.Label = Loc.Get("MainWindow", "ImportFolder");
         BtnExport.Label = Loc.Get("MainWindow", "Export"); BtnDelete.Label = Loc.Get("MainWindow", "Delete");
         BtnLock.Label = Loc.Get("MainWindow", "Lock");
         BtnMoveIn.Label = Loc.Get("MainWindow", "MoveIn");
         BtnMoveOut.Label = Loc.Get("MainWindow", "MoveOut");
+        ToolTipService.SetToolTip(BtnNewFolder, $"{Loc.Get("MainWindow", "NewFolder")} (Ctrl+N)");
+        ToolTipService.SetToolTip(BtnImport, $"{Loc.Get("MainWindow", "Import")} (Ctrl+I)");
+        ToolTipService.SetToolTip(BtnExport, $"{Loc.Get("MainWindow", "Export")} (Ctrl+E)");
+        ToolTipService.SetToolTip(BtnDelete, $"{Loc.Get("MainWindow", "Delete")} (Del)");
+        ToolTipService.SetToolTip(BtnLock, $"{Loc.Get("MainWindow", "Lock")} (Ctrl+L)");
+        AutomationProperties.SetName(BtnNewFolder, Loc.Get("Common", "NewFolder"));
+        AutomationProperties.SetName(BtnImport, Loc.Get("Common", "Import"));
+        AutomationProperties.SetName(BtnImportFolder, Loc.Get("Common", "ImportFolder"));
+        AutomationProperties.SetName(BtnExport, Loc.Get("Common", "Export"));
+        AutomationProperties.SetName(BtnMoveIn, Loc.Get("Common", "MoveIn"));
+        AutomationProperties.SetName(BtnMoveOut, Loc.Get("Common", "MoveOut"));
+        AutomationProperties.SetName(BtnDelete, Loc.Get("Common", "Delete"));
+        AutomationProperties.SetName(BtnLock, Loc.Get("Common", "Lock"));
     }
 
     private static readonly int[] AutoLockValues = { 0, 60, 300, 600, 900, 1800 };
@@ -588,6 +874,8 @@ public sealed partial class MainWindow : Window
         GitHubLink.Content = Loc.Get("SettingsWindow", "GitHub");
         VaultPathText.Text = _vault.VaultPath;
         RefreshErrorLogSection();
+        AutomationProperties.SetName(SettingsBackBtn, Loc.Get("Common", "Back"));
+        PreviewLabel.Text = Loc.Get("SettingsWindow", "GeneratePreview");
         ThemeCombo.Items.Clear();
         ThemeCombo.Items.Add(new ComboBoxItem { Tag = AppTheme.Default, Content = Loc.Get("SettingsWindow", "ThemeDefault") });
         ThemeCombo.Items.Add(new ComboBoxItem { Tag = AppTheme.Light, Content = Loc.Get("SettingsWindow", "ThemeLight") });
@@ -710,7 +998,7 @@ public sealed partial class MainWindow : Window
             titleBar.ButtonPressedBackgroundColor = bgColor;
             titleBar.ButtonPressedForegroundColor = fgColor;
         }
-        catch { }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"ApplyTheme titlebar failed: {ex.Message}"); }
 
         ApplyAccent(_theme.AccentColor);
     }
@@ -746,7 +1034,7 @@ public sealed partial class MainWindow : Window
     {
         if (!_splitterActive || s is not UIElement el) return;
         var dx = e.GetCurrentPoint(el).Position.X - _splitterStartX;
-        var newWidth = Math.Max(56, Math.Min(400, SidebarBorder.Width + dx));
+        var newWidth = Math.Max(180, Math.Min(400, SidebarBorder.Width + dx));
         SidebarBorder.Width = newWidth;
         _splitterStartX = e.GetCurrentPoint(el).Position.X;
     }
@@ -767,6 +1055,25 @@ public sealed partial class MainWindow : Window
         Controls.CursorHelper.ShowArrow();
     }
 
+    void OnSplitterDoubleTapped(object s, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e)
+    {
+        // Toggle sidebar collapse/expand
+        if (SidebarBorder.Width > 0)
+        {
+            _savedSidebarWidth = SidebarBorder.Width;
+            SidebarBorder.Width = 0;
+            SidebarBorder.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            SidebarBorder.Width = _savedSidebarWidth > 0 ? _savedSidebarWidth : Constants.SidebarDefaultWidth;
+            SidebarBorder.Visibility = Visibility.Visible;
+        }
+        e.Handled = true;
+    }
+
+    private double _savedSidebarWidth;
+
     // ── Window ──
     private bool _busy;
 
@@ -783,6 +1090,8 @@ public sealed partial class MainWindow : Window
         _ = FileList.LoadPreviewsAsync(_vault);
         Sidebar.BuildTree(_vault.GetFolderTree());
         Sidebar.FavoritesPanel.Refresh();
+        UpdateBreadcrumb();
+        UpdateNavButtons();
     }
 
     void OnFavoriteToggle(object? sender, VaultFileItem item)
@@ -821,8 +1130,7 @@ public sealed partial class MainWindow : Window
     {
         var targetPath = fav.IsFolder ? fav.ItemPath : (Path.GetDirectoryName(fav.ItemPath.Replace('\\', '/'))?.Replace('\\', '/') ?? "/");
         if (string.IsNullOrEmpty(targetPath)) targetPath = "/";
-        _vault.SetCurrentPath(targetPath);
-        RefreshList();
+        NavigateTo(targetPath);
     }
 
     async Task OnFavoriteRename(FavoriteItem fav)
@@ -867,7 +1175,6 @@ public sealed partial class MainWindow : Window
         var files = await p.PickMultipleFilesAsync();
         if (files == null || files.Count == 0) return;
 
-        // Get file sizes for progress tracking
         var fileSizes = new long[files.Count];
         long totalSize = 0;
         for (int i = 0; i < files.Count; i++)
@@ -923,6 +1230,27 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    async void OnImportFolderCmd(object s, RoutedEventArgs e)
+    {
+        if (_busy) return;
+        var p = new Windows.Storage.Pickers.FolderPicker();
+        WinRT.Interop.InitializeWithWindow.Initialize(p, Hwnd);
+        p.FileTypeFilter.Add("*");
+        var folder = await p.PickSingleFolderAsync();
+        if (folder == null) return;
+
+        _busy = true;
+        ShowProgress(Loc.Get("MainWindow", "ImportFolder"), folder.DisplayName);
+        try
+        {
+            var count = await _vault.ImportDirectoryAsync(folder.Path, new Progress<string>(name =>
+                UpdateProgress(0, name)));
+            ShowSuccessBanner(string.Format(Loc.Get("MainWindow", "BatchDone"), Loc.Get("MainWindow", "ImportFolder"), count));
+        }
+        catch (Exception ex) { LogService.Error($"Folder import failed: {ex}"); ShowErrorBanner(ex.Message); }
+        finally { _busy = false; HideProgress(); RefreshList(); }
+    }
+
     async void OnExportCmd(object s, RoutedEventArgs e)
     {
         if (_busy) return;
@@ -943,7 +1271,9 @@ public sealed partial class MainWindow : Window
         var folder = await p.PickSingleFolderAsync();
         if (folder == null) return;
 
-        var totalSize = items.Sum(i => i.OriginalSize);
+        var files = items.Where(i => !i.IsFolder).ToList();
+        var folders = items.Where(i => i.IsFolder).ToList();
+        var totalSize = files.Sum(i => i.OriginalSize);
         _busy = true;
         _batchCts = new CancellationTokenSource();
         var errors = new List<(string Name, string Error)>();
@@ -952,12 +1282,26 @@ public sealed partial class MainWindow : Window
         try
         {
             ShowProgress(Loc.Get("MainWindow", "Export"), Loc.Format("MainWindow", "BatchProgress", 0, items.Count), true);
-            for (int i = 0; i < items.Count; i++)
+
+            foreach (var folderItem in folders)
             {
                 if (_batchCts.Token.IsCancellationRequested) break;
                 try
                 {
-                    var itemSize = items[i].OriginalSize;
+                    var subDir = Path.Combine(folder.Path, folderItem.Name);
+                    var count = await _vault.ExportDirectoryAsync(
+                        folderItem.VirtualPath == "/" ? "/" + folderItem.Name : folderItem.VirtualPath + "/" + folderItem.Name,
+                        subDir, null, _batchCts.Token);
+                }
+                catch (Exception ex) { errors.Add((folderItem.Name, ex.Message)); }
+            }
+
+            for (int i = 0; i < files.Count; i++)
+            {
+                if (_batchCts.Token.IsCancellationRequested) break;
+                try
+                {
+                    var itemSize = files[i].OriginalSize;
                     var fileIdx = i;
                     var progress = new Progress<double>(pct =>
                     {
@@ -966,15 +1310,15 @@ public sealed partial class MainWindow : Window
                         lastUpdate = now;
                         var current = completedSize + (long)(pct * itemSize);
                         var overall = totalSize > 0 ? (double)current / totalSize : 0;
-                        UpdateProgress(overall, $"{items[fileIdx].Name} — {FormatBytes(current)} / {FormatBytes(totalSize)}");
+                        UpdateProgress(overall, $"{files[fileIdx].Name} — {FormatBytes(current)} / {FormatBytes(totalSize)}");
                     });
-                    var f = await folder.CreateFileAsync(items[i].Name, Windows.Storage.CreationCollisionOption.GenerateUniqueName);
+                    var f = await folder.CreateFileAsync(files[i].Name, Windows.Storage.CreationCollisionOption.GenerateUniqueName);
                     await using var st = await f.OpenStreamForWriteAsync();
-                    await _vault.ExportItemAsync(items[i].Id, st, progress, _batchCts.Token);
+                    await _vault.ExportItemAsync(files[i].Id, st, progress, _batchCts.Token);
                 }
-                catch (Exception ex) { errors.Add((items[i].Name, ex.Message)); }
-                completedSize += items[i].OriginalSize;
-                UpdateProgress((double)completedSize / totalSize, Loc.Format("MainWindow", "BatchProgressFile", i + 1, items.Count, items[i].Name));
+                catch (Exception ex) { errors.Add((files[i].Name, ex.Message)); }
+                completedSize += files[i].OriginalSize;
+                UpdateProgress((double)completedSize / totalSize, Loc.Format("MainWindow", "BatchProgressFile", i + 1, files.Count, files[i].Name));
             }
         }
         finally { _busy = false; _batchCts?.Dispose(); _batchCts = null; HideProgress(); }
@@ -1002,8 +1346,7 @@ public sealed partial class MainWindow : Window
                 await using var st = await f.OpenStreamForReadAsync();
                 await _vault.ImportItemAsync(st, f.Name);
                 UpdateProgress((double)(i + 1) / files.Count, Loc.Format("MainWindow", "BatchProgressFile", i + 1, files.Count, f.Name));
-                // Delete original after successful import
-                try { await f.DeleteAsync(); } catch { /* original might be locked */ }
+                try { await f.DeleteAsync(); } catch { }
             }
         }
         finally { _busy = false; HideProgress(); RefreshList(); }
@@ -1019,49 +1362,81 @@ public sealed partial class MainWindow : Window
         var folder = await p.PickSingleFolderAsync();
         if (folder == null) return;
 
+        var files = sel.Where(i => !i.IsFolder).ToList();
+        var folders = sel.Where(i => i.IsFolder).ToList();
         _busy = true;
         _batchCts = new CancellationTokenSource();
         var errors = new List<(string Name, string Error)>();
-        var items = sel.ToList();
         try
         {
-            ShowProgress(Loc.Get("MainWindow", "MoveOut"), Loc.Format("MainWindow", "BatchProgress", 0, items.Count), true);
-            for (int i = 0; i < items.Count; i++)
+            ShowProgress(Loc.Get("MainWindow", "MoveOut"), Loc.Format("MainWindow", "BatchProgress", 0, sel.Count), true);
+
+            foreach (var folderItem in folders)
             {
                 if (_batchCts.Token.IsCancellationRequested) break;
                 try
                 {
-                    UpdateProgress((double)i / items.Count, Loc.Format("MainWindow", "BatchProgressFile", i + 1, items.Count, items[i].Name));
-                    var f = await folder.CreateFileAsync(items[i].Name, Windows.Storage.CreationCollisionOption.GenerateUniqueName);
-                    await using var st = await f.OpenStreamForWriteAsync();
-                    await _vault.ExportItemAsync(items[i].Id, st, progress: null, _batchCts.Token);
-                    _vault.DeleteItem(items[i].Id);
+                    var subDir = Path.Combine(folder.Path, folderItem.Name);
+                    await _vault.ExportDirectoryAsync(
+                        folderItem.VirtualPath == "/" ? "/" + folderItem.Name : folderItem.VirtualPath + "/" + folderItem.Name,
+                        subDir, null, _batchCts.Token);
+                    _vault.DeleteDirectoryRecursive(folderItem.VirtualPath == "/" ? "/" + folderItem.Name : folderItem.VirtualPath + "/" + folderItem.Name);
                 }
-                catch (Exception ex) { errors.Add((items[i].Name, ex.Message)); }
+                catch (Exception ex) { errors.Add((folderItem.Name, ex.Message)); }
+            }
+
+            for (int i = 0; i < files.Count; i++)
+            {
+                if (_batchCts.Token.IsCancellationRequested) break;
+                try
+                {
+                    UpdateProgress((double)i / sel.Count, Loc.Format("MainWindow", "BatchProgressFile", i + 1, sel.Count, files[i].Name));
+                    var f = await folder.CreateFileAsync(files[i].Name, Windows.Storage.CreationCollisionOption.GenerateUniqueName);
+                    await using var st = await f.OpenStreamForWriteAsync();
+                    await _vault.ExportItemAsync(files[i].Id, st, progress: null, _batchCts.Token);
+                    _vault.DeleteItem(files[i].Id);
+                }
+                catch (Exception ex) { errors.Add((files[i].Name, ex.Message)); }
             }
         }
         finally { _busy = false; _batchCts?.Dispose(); _batchCts = null; HideProgress(); RefreshList(); }
 
-        await ReportBatchResult(Loc.Get("MainWindow", "MoveOut"), items.Count, errors);
+        await ReportBatchResult(Loc.Get("MainWindow", "MoveOut"), sel.Count, errors);
     }
 
     async void OnDropIn(object? s, IReadOnlyList<string> paths)
     {
+        var files = paths.Where(p => File.Exists(p)).ToList();
+        var dirs = paths.Where(p => Directory.Exists(p)).ToList();
+        if (files.Count + dirs.Count == 0) return;
+
         _busy = true;
-        ShowProgress(Loc.Get("MainWindow", "Import"), Loc.Format("MainWindow", "BatchProgress", 0, paths.Count));
+        ShowProgress(Loc.Get("MainWindow", "Import"), Loc.Format("MainWindow", "BatchProgress", 0, files.Count + dirs.Count));
         var errors = new List<string>();
+        int done = 0;
         try
         {
-            for (int i = 0; i < paths.Count; i++)
+            foreach (var dir in dirs)
             {
-                var p = paths[i];
+                try
+                {
+                    var count = await _vault.ImportDirectoryAsync(dir);
+                    done += count;
+                }
+                catch (Exception ex) { errors.Add($"{Path.GetFileName(dir)}: {ex.Message}"); LogService.Error($"Drop folder import failed for {dir}: {ex}"); }
+                UpdateProgress((double)(done) / (files.Count + dirs.Count), Path.GetFileName(dir));
+            }
+
+            foreach (var p in files)
+            {
                 try
                 {
                     await using var fs = File.OpenRead(p);
                     await _vault.ImportItemAsync(fs, Path.GetFileName(p));
+                    done++;
                 }
                 catch (Exception ex) { errors.Add($"{Path.GetFileName(p)}: {ex.Message}"); LogService.Error($"Drop import failed for {p}: {ex}"); }
-                UpdateProgress((double)(i + 1) / paths.Count, Loc.Format("MainWindow", "BatchProgressFile", i + 1, paths.Count, Path.GetFileName(p)));
+                UpdateProgress((double)(done) / (files.Count + dirs.Count), Path.GetFileName(p));
             }
         }
         finally
@@ -1123,7 +1498,7 @@ public sealed partial class MainWindow : Window
         await ReportBatchResult(Loc.Get("MainWindow", "Delete"), items.Count, errors);
     }
 
-    async void OnLockCmd(object s, RoutedEventArgs e) { if (_busy) return; _busy = true; try { _pw.Lock(); AuthOverlay.Visibility = Visibility.Visible; VaultContent.Visibility = Visibility.Collapsed; ShowUnlock(); } finally { _busy = false; } }
+    async void OnLockCmd(object s, RoutedEventArgs e) { if (_busy) return; _busy = true; try { _vault.ClearKeys(); _pw.Lock(); StatusBar.SetLocked(true); AuthOverlay.Visibility = Visibility.Visible; VaultContent.Visibility = Visibility.Collapsed; ShowUnlock(); } finally { _busy = false; } }
 
     async void OnNewFolderCmd(object s, RoutedEventArgs e)
     {
@@ -1131,7 +1506,73 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) { LogService.Error($"New folder failed: {ex}"); }
     }
 
-    void OnFileOpened(object? s, Models.VaultFileItem item) => _ = OpenViewer(item);
+    void OnSortChanged(object s, RoutedEventArgs e)
+    {
+        if (s is not MenuFlyoutItem item) return;
+        var tag = item.Tag?.ToString();
+        if (string.IsNullOrEmpty(tag)) return;
+
+        var parts = tag.Split('_');
+        if (parts.Length != 2) return;
+
+        var col = parts[0];
+        var asc = parts[1] == "asc";
+
+        // Update the file list sort
+        FileList.SetSort(col, asc);
+    }
+
+    void OnFileOpened(object? s, Models.VaultFileItem item)
+    {
+        // Add to quick access
+        Sidebar.AddToRecentFiles(item);
+
+        if (item.IsFolder)
+        {
+            NavigateTo(item.VirtualPath);
+            return;
+        }
+        _ = OpenViewer(item);
+    }
+
+    async void ShowFileProperties(Models.VaultFileItem item)
+    {
+        if (_activeDialog != null) return;
+        try
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"{Loc.Get("FileList", "Name")}: {item.Name}");
+            sb.AppendLine($"{Loc.Get("FileList", "Type")}: {item.ContentType}");
+            sb.AppendLine($"{Loc.Get("FileList", "Size")}: {item.FormattedSize}");
+            sb.AppendLine($"{Loc.Get("FileList", "EncryptedSize")}: {FormatBytes(item.EncryptedSize)}");
+            sb.AppendLine($"{Loc.Get("FileList", "CreatedAt")}: {item.CreatedAt:yyyy-MM-dd HH:mm:ss}");
+            sb.AppendLine($"{Loc.Get("FileList", "Date")}: {item.ModifiedAt:yyyy-MM-dd HH:mm:ss}");
+            sb.AppendLine($"{Loc.Get("FileList", "Path")}: {item.VirtualPath}");
+            sb.AppendLine($"ID: {item.Id[..12]}...");
+
+            var d = new ContentDialog
+            {
+                Title = item.Name,
+                Content = new ScrollViewer
+                {
+                    Content = new TextBlock
+                    {
+                        Text = sb.ToString(),
+                        TextWrapping = TextWrapping.Wrap,
+                        FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
+                        IsTextSelectionEnabled = true
+                    },
+                    MaxHeight = 400
+                },
+                CloseButtonText = Loc.Get("Common", "OK"),
+                XamlRoot = Content.XamlRoot
+            };
+            _activeDialog = d;
+            await d.ShowAsync();
+            _activeDialog = null;
+        }
+        catch (Exception ex) { LogService.Error($"File properties failed: {ex}"); _activeDialog = null; }
+    }
 
     async Task OpenViewer(Models.VaultFileItem item)
     {
@@ -1140,7 +1581,7 @@ public sealed partial class MainWindow : Window
         // Close existing preview window
         if (_previewWindow != null)
         {
-            try { _previewWindow.Close(); } catch { }
+            try { _previewWindow.Close(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Preview close failed: {ex.Message}"); }
             _previewWindow = null;
         }
 
@@ -1180,6 +1621,16 @@ public sealed partial class MainWindow : Window
             { _vault.RenameItem(item.Id, input.Text); RefreshList(); }
         }
         catch (Exception ex) { LogService.Error($"Rename failed: {ex}"); _activeDialog = null; }
+    }
+
+    void OnInlineRenameRequested(object? s, (Models.VaultFileItem Item, string NewName) e)
+    {
+        try
+        {
+            _vault.RenameItem(e.Item.Id, e.NewName);
+            RefreshList();
+        }
+        catch (Exception ex) { LogService.Error($"Inline rename failed: {ex}"); }
     }
 
 
@@ -1302,11 +1753,11 @@ public sealed partial class MainWindow : Window
         {
             var (glyph, color) = issue.Type switch
             {
-                IntegrityIssueType.OrphanMeta => ("", "#CA5010"),
-                IntegrityIssueType.OrphanData => ("", "#CA5010"),
-                IntegrityIssueType.Undecryptable => ("", "#D13438"),
-                IntegrityIssueType.Unbound => ("", "#D13438"),
-                _ => ("", "#666666")
+                IntegrityIssueType.OrphanMeta => ("\uE7C3", "#CA5010"),
+                IntegrityIssueType.OrphanData => ("\uE7C3", "#CA5010"),
+                IntegrityIssueType.Undecryptable => ("\uE730", "#D13438"),
+                IntegrityIssueType.Unbound => ("\uE7BA", "#D13438"),
+                _ => ("\uE783", Application.Current.RequestedTheme == ApplicationTheme.Dark ? "#999999" : "#666666")
             };
             ErrorLogList.Items.Add(new IntegrityIssueVM(issue, glyph, color));
         }
@@ -1491,6 +1942,7 @@ public sealed partial class MainWindow : Window
             var enc = File.ReadAllBytes(vkPath);
             var kp = _enc.DecryptVaultKeyPair(enc, oldUk);
             File.WriteAllBytes(vkPath, _enc.EncryptVaultKeyPair(kp, newUk));
+            Array.Clear(oldUk);
             await Info(Loc.Get("SettingsWindow", "PwChanged"));
         }
         catch (Exception ex) { await Info(ex.Message); }

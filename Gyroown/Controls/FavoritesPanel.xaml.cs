@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Automation;
 using Gyroown.Models;
 using Gyroown.Services;
 
@@ -33,6 +34,16 @@ public sealed partial class FavoritesPanel : UserControl
     {
         InitializeComponent();
         HeaderText.Text = Loc.Get("Favorites", "Title");
+        var langHandler = (EventHandler)((_, _) => ApplyLoc());
+        Loc.LanguageChanged += langHandler;
+        Unloaded += (_, _) => Loc.LanguageChanged -= langHandler;
+        ApplyLoc();
+    }
+
+    void ApplyLoc()
+    {
+        HeaderText.Text = Loc.Get("Favorites", "Title");
+        AutomationProperties.SetName(ToggleBtn, Loc.Get("Common", "ExpandCollapse"));
     }
 
     private EventHandler? _favoritesChangedHandler;

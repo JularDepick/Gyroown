@@ -1,4 +1,5 @@
-﻿using Microsoft.UI.Xaml.Controls;
+﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Gyroown.Services;
 
@@ -6,6 +7,9 @@ namespace Gyroown.Controls;
 
 public sealed partial class VaultStatusBar : UserControl
 {
+    public event EventHandler? ViewDetailsRequested;
+    public event EventHandler? ViewIconsRequested;
+
     public VaultStatusBar() => InitializeComponent();
 
     public void SetItemCount(int count) =>
@@ -18,7 +22,7 @@ public sealed partial class VaultStatusBar : UserControl
     {
         if (count == 0)
         {
-            SelectionInfoText.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+            SelectionInfoText.Visibility = Visibility.Collapsed;
             return;
         }
         var sizeStr = totalSize switch
@@ -29,7 +33,7 @@ public sealed partial class VaultStatusBar : UserControl
             _ => $"{totalSize / (1024.0 * 1024 * 1024):F1} GB"
         };
         SelectionInfoText.Text = Loc.Format("StatusBar", "Selected", count, sizeStr);
-        SelectionInfoText.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+        SelectionInfoText.Visibility = Visibility.Visible;
     }
 
     public void SetVaultPath(string path) => VaultPathText.Text = path;
@@ -44,4 +48,7 @@ public sealed partial class VaultStatusBar : UserControl
         LockIcon.Foreground = brush;
         LockStatusText.Foreground = brush;
     }
+
+    private void OnViewDetailsClick(object s, RoutedEventArgs e) => ViewDetailsRequested?.Invoke(this, EventArgs.Empty);
+    private void OnViewIconsClick(object s, RoutedEventArgs e) => ViewIconsRequested?.Invoke(this, EventArgs.Empty);
 }

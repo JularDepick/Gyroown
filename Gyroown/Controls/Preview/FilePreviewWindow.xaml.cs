@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.UI.Xaml.Automation;
 using Gyroown.Models;
 using Gyroown.Services;
 using WinRT.Interop;
@@ -40,7 +41,12 @@ public sealed partial class FilePreviewWindow : Window
         var appWindow = AppWindow.GetFromWindowId(windowId);
 
         appWindow.ResizeClient(new Windows.Graphics.SizeInt32(1100, 750));
-        appWindow.Title = $"{AppInfo.Name} — View";
+        appWindow.Title = $"{AppInfo.Name} — {Loc.Get("Viewer", "Title")}";
+
+        ApplyLoc();
+        var langHandler = (EventHandler)((_, _) => ApplyLoc());
+        Loc.LanguageChanged += langHandler;
+        Closed += (_, _) => { Loc.LanguageChanged -= langHandler; CleanupViewers(); };
 
         // Try to make window resizable
         try
@@ -55,9 +61,13 @@ public sealed partial class FilePreviewWindow : Window
 
         // Load current file
         _ = LoadCurrentFileAsync();
+    }
 
-        // Cleanup media resources on window close
-        Closed += (_, _) => CleanupViewers();
+    void ApplyLoc()
+    {
+        AutomationProperties.SetName(PrevBtn, Loc.Get("Common", "PreviousFile"));
+        AutomationProperties.SetName(NextBtn, Loc.Get("Common", "NextFile"));
+        AutomationProperties.SetName(CloseBtn, Loc.Get("Common", "Close"));
     }
 
     // ── Keyboard shortcuts ──
@@ -179,6 +189,7 @@ public sealed partial class FilePreviewWindow : Window
             panel.Children.Add(new FontIcon
             {
                 Glyph = item.IconGlyph,
+                FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe MDL2 Assets"),
                 FontSize = 48,
                 Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"],
                 HorizontalAlignment = HorizontalAlignment.Center

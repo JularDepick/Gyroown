@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <UserControl
     x:Class="Gyroown.Controls.TitleBarControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -11,7 +11,7 @@
         <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                 <FontIcon Glyph="&#xE8E3;" FontSize="16" Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
-                <TextBlock Text="Gyroown" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
+                <TextBlock x:Name="AppTitleText" FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" />
             </StackPanel>
             <AutoSuggestBox x:Name="SearchBoxInput" Grid.Column="1" PlaceholderText="" MaxWidth="320"
                      HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -20,19 +20,22 @@
                      SuggestionChosen="OnSuggestionChosen"
                      AutomationProperties.Name="Search" />
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
-            <Button x:Name="RefreshBtn" Width="32" Height="28"
+            <Button x:Name="RefreshBtn" Width="32" Height="28" Padding="4,2"
                     Click="OnRefreshClick"
-                    AutomationProperties.Name="Refresh">
-                <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                    AutomationProperties.Name="Refresh"
+                    ToolTipService.Placement="Mouse">
+                <FontIcon Glyph="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
             </Button>
-            <Button x:Name="CheckBtn" Width="32" Height="28"
+            <Button x:Name="CheckBtn" Width="32" Height="28" Padding="4,2"
                     Click="OnCheckClick"
-                    AutomationProperties.Name="Integrity Check">
-                <FontIcon Glyph="&#xE73E;" FontSize="14" />
+                    AutomationProperties.Name="Integrity Check"
+                    ToolTipService.Placement="Mouse">
+                <FontIcon Glyph="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
             </Button>
-            <Button x:Name="AdvancedSearchBtn" Width="32" Height="28"
-                    AutomationProperties.Name="Advanced Search">
-                <FontIcon Glyph="&#xE71C;" FontSize="14" />
+            <Button x:Name="AdvancedSearchBtn" Width="32" Height="28" Padding="4,2"
+                    AutomationProperties.Name="Advanced Search"
+                    ToolTipService.Placement="Mouse">
+                <FontIcon Glyph="&#xE71C;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
                 <Button.Flyout>
                     <Flyout x:Name="AdvancedSearchFlyout" Placement="BottomEdgeAlignedRight"
                             Closing="OnFlyoutClosing">
@@ -70,9 +73,10 @@
                     </Flyout>
                 </Button.Flyout>
             </Button>
-            <Button x:Name="SettingsBtn" Width="32" Height="28" Click="OnSettingsClick"
-                    AutomationProperties.Name="Settings">
-                <FontIcon Glyph="&#xE713;" FontSize="14" />
+            <Button x:Name="SettingsBtn" Width="32" Height="28" Padding="4,2" Click="OnSettingsClick"
+                    AutomationProperties.Name="Settings"
+                    ToolTipService.Placement="Mouse">
+                <FontIcon Glyph="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
             </Button>
             </StackPanel>
         </Grid>

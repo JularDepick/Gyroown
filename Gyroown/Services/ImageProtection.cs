@@ -12,8 +12,8 @@ public static class ImageProtection
     private const string KeyFileName = ".imgkey";
     private const string ImageFileName = "image.pwimg";
 
-    private static string KeyPath => Path.Combine(VaultService.AuthDir, KeyFileName);
-    private static string ImagePath => Path.Combine(VaultService.AuthDir, ImageFileName);
+    private static string KeyPath => Constants.ImageKeyFile;
+    private static string ImagePath => Constants.ImageFile;
 
     public static bool HasStoredImage => File.Exists(ImagePath);
 
@@ -37,7 +37,7 @@ public static class ImageProtection
 
     public static void DeleteImage()
     {
-        try { if (File.Exists(ImagePath)) File.Delete(ImagePath); } catch { }
+        try { if (File.Exists(ImagePath)) File.Delete(ImagePath); } catch (Exception ex) { LogService.Debug($"DeleteImage failed: {ex.Message}"); }
     }
 
     static byte[] GetOrCreateKey()

@@ -40,9 +40,7 @@ public class ThemeService : IThemeService
 
     public ThemeService()
     {
-        _settingsFile = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".Gyroown", "settings.gyrojson");
+        _settingsFile = Constants.SettingsFile;
     }
 
     /// <summary>

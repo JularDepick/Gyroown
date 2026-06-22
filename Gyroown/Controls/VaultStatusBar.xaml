@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <UserControl
     x:Class="Gyroown.Controls.VaultStatusBar"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -41,10 +41,20 @@
         <StackPanel
             Grid.Column="2"
             Orientation="Horizontal"
-            Spacing="6"
+            Spacing="4"
             VerticalAlignment="Center">
+            <Button x:Name="ViewDetailsBtn" Width="24" Height="20" Padding="2"
+                    Click="OnViewDetailsClick" ToolTipService.ToolTip="Details">
+                <FontIcon Glyph="&#xE8A1;" FontFamily="Segoe MDL2 Assets" FontSize="10" />
+            </Button>
+            <Button x:Name="ViewIconsBtn" Width="24" Height="20" Padding="2"
+                    Click="OnViewIconsClick" ToolTipService.ToolTip="Icons">
+                <FontIcon Glyph="&#xE8A9;" FontFamily="Segoe MDL2 Assets" FontSize="10" />
+            </Button>
+            <Border Width="1" Height="16" Background="{ThemeResource CardStrokeColorDefaultBrush}" Margin="2,0" />
             <FontIcon x:Name="LockIcon"
                 Glyph="&#xE72E;"
+                FontFamily="Segoe MDL2 Assets"
                 FontSize="12"
                 Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
             <TextBlock

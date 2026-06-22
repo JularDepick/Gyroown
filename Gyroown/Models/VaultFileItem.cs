@@ -1,4 +1,4 @@
-﻿namespace Gyroown.Models;
+namespace Gyroown.Models;
 
 /// <summary>Vault file item.</summary>
 public class VaultFileItem : System.ComponentModel.INotifyPropertyChanged
@@ -43,6 +43,13 @@ public class VaultFileItem : System.ComponentModel.INotifyPropertyChanged
         string ct when ct.StartsWith("audio/") => "\uE8D6",
         "application/pdf" => "\uEA90",
         string ct when ct.StartsWith("text/") => "\uE8A5",
+        "application/zip" or "application/x-rar-compressed" or "application/x-7z-compressed"
+            or "application/x-tar" or "application/gzip" => "\uE8B5",
+        "application/x-msdownload" or "application/x-msdos-program"
+            or "application/x-msi" or "application/x-sh" => "\uE7EF",
+        "application/msword" or "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            or "application/vnd.ms-excel" or "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            or "application/vnd.ms-powerpoint" or "application/vnd.openxmlformats-officedocument.presentationml.presentation" => "\uE8A5",
         _ => "\uE8A5"
     };
 
@@ -58,4 +65,13 @@ public class VaultFileItem : System.ComponentModel.INotifyPropertyChanged
     /// <summary>Star icon glyph for favorite status.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public string FavoriteGlyph => IsFavorited ? "\uE735" : "\uE734";
+
+    private bool _isSearchMatch;
+    /// <summary>Whether this item matches the current search query.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsSearchMatch
+    {
+        get => _isSearchMatch;
+        set { _isSearchMatch = value; OnPropertyChanged(); }
+    }
 }

@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Automation;
 using System.Text;
 using System.Text.Json;
 using Gyroown.Services;
@@ -16,9 +17,7 @@ public sealed partial class TitleBarControl : UserControl
     public event EventHandler? IntegrityCheckRequested;
     public event EventHandler? SettingsRequested;
 
-    private static string HistoryFile => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        ".Gyroown", "search-history.gyrojson");
+    private static string HistoryFile => Constants.SearchHistoryFile;
     private const int MaxHistory = 10;
     private readonly EncryptionService _enc = new();
     private byte[]? _vaultKey;
@@ -57,6 +56,13 @@ public sealed partial class TitleBarControl : UserControl
         ModifiedDateLabel.Text = Loc.Get("FileList", "ModifiedDate");
         ResetFiltersBtn.Content = Loc.Get("FileList", "ResetFilters");
 
+        AppTitleText.Text = AppInfo.Name;
+        AutomationProperties.SetName(SearchBoxInput, Loc.Get("Common", "Search"));
+        AutomationProperties.SetName(RefreshBtn, Loc.Get("Common", "Refresh"));
+        AutomationProperties.SetName(CheckBtn, Loc.Get("Common", "IntegrityCheck"));
+        AutomationProperties.SetName(AdvancedSearchBtn, Loc.Get("Common", "AdvancedSearch"));
+        AutomationProperties.SetName(SettingsBtn, Loc.Get("Common", "Settings"));
+
         // Refresh ComboBox item text
         RefreshComboItems();
         UpdateFilterButtonIndicator();
@@ -77,7 +83,7 @@ public sealed partial class TitleBarControl : UserControl
             var arr = JsonSerializer.Deserialize<string[]>(Encoding.UTF8.GetString(json));
             if (arr != null) _history = arr.Where(s => !string.IsNullOrEmpty(s)).ToList();
         }
-        catch { }
+        catch (Exception ex) { LogService.Debug($"LoadHistory failed: {ex.Message}"); }
     }
 
     async Task SaveHistoryAsync()
@@ -90,7 +96,7 @@ public sealed partial class TitleBarControl : UserControl
             var blob = _enc.EncryptBlob(json, _vaultKey);
             await File.WriteAllBytesAsync(HistoryFile, blob);
         }
-        catch { }
+        catch (Exception ex) { LogService.Debug($"SaveHistory failed: {ex.Message}"); }
     }
 
     void SaveHistory() { if (_vaultKey != null) _ = SaveHistoryAsync(); }

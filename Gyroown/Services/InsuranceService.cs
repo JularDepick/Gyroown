@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.Json;
 
 namespace Gyroown.Services;
@@ -10,9 +10,7 @@ namespace Gyroown.Services;
 /// </summary>
 public static class InsuranceService
 {
-    public static string InsuranceFilePath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        ".Gyroown", "auth", "insurance.gyrock");
+    public static string InsuranceFilePath => Constants.InsuranceFile;
 
     public static bool IsEnabled => File.Exists(InsuranceFilePath);
 

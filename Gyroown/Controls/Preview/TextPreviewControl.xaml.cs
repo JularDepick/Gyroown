@@ -1,4 +1,4 @@
-﻿using Microsoft.UI;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
@@ -21,6 +21,7 @@ public sealed partial class TextPreviewControl : UserControl
         InitializeComponent();
         InitEncodingCombo();
         InitLabels();
+        ActualThemeChanged += (_, _) => RenderText();
     }
 
     public void LoadText(byte[] rawBytes, string? fileNameHint = null)
@@ -331,10 +332,11 @@ public sealed partial class TextPreviewControl : UserControl
             var b = Convert.ToByte(hex[4..6], 16);
             return Windows.UI.Color.FromArgb(255, r, g, b);
         }
-        return Colors.White;
+        return Application.Current.RequestedTheme == ApplicationTheme.Dark ? Colors.White : Colors.Black;
     }
 
-    static bool IsDarkTheme() => Application.Current.RequestedTheme == ApplicationTheme.Dark;
+    bool IsDarkTheme() => ActualTheme == Microsoft.UI.Xaml.ElementTheme.Dark
+        || (ActualTheme == Microsoft.UI.Xaml.ElementTheme.Default && Application.Current.RequestedTheme == ApplicationTheme.Dark);
 
-    static string ThemeColor(string darkHex, string lightHex) => IsDarkTheme() ? darkHex : lightHex;
+    string ThemeColor(string darkHex, string lightHex) => IsDarkTheme() ? darkHex : lightHex;
 }

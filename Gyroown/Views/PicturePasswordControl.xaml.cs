@@ -1,4 +1,4 @@
-﻿using Microsoft.UI;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -59,10 +59,13 @@ public sealed partial class PicturePasswordControl : UserControl, IPasswordContr
         var e = new Ellipse { Width = R * 2, Height = R * 2, Fill = accent, Opacity = 0.85 };
         Canvas.SetLeft(e, rx * w - R); Canvas.SetTop(e, ry * h - R);
         MarkCanvas.Children.Add(e);
-        var t = new TextBlock { Text = n.ToString(), Foreground = new SolidColorBrush(Colors.White), FontWeight = Microsoft.UI.Text.FontWeights.Bold, FontSize = 13, Width = R * 2, Height = R * 2, TextAlignment = TextAlignment.Center, HorizontalTextAlignment = TextAlignment.Center };
+        var fg = GetLuminance(accent.Color) > 0.5 ? Colors.Black : Colors.White;
+        var t = new TextBlock { Text = n.ToString(), Foreground = new SolidColorBrush(fg), FontWeight = Microsoft.UI.Text.FontWeights.Bold, FontSize = 13, Width = R * 2, Height = R * 2, TextAlignment = TextAlignment.Center, HorizontalTextAlignment = TextAlignment.Center };
         Canvas.SetLeft(t, rx * w - R); Canvas.SetTop(t, ry * h - R);
         MarkCanvas.Children.Add(t);
     }
+
+    static double GetLuminance(Windows.UI.Color c) => (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) / 255.0;
 
     private void OnReset(object s, RoutedEventArgs e) => Clear();
 

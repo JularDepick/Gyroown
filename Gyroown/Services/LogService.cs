@@ -25,7 +25,7 @@ public static class LogService
 
     static LogService()
     {
-        LogRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".Gyroown", "log");
+        LogRoot = Constants.LogDir;
         ErrorDir = Path.Combine(LogRoot, "error");
         CrashDir = Path.Combine(LogRoot, "crash");
         RunDir = Path.Combine(LogRoot, "run");

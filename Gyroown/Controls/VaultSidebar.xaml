@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <UserControl
     x:Class="Gyroown.Controls.VaultSidebar"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -9,21 +9,38 @@
     mc:Ignorable="d"
     MinWidth="180">
 
-    <Grid RowDefinitions="Auto,Auto,*">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*">
+        <!-- Quick Access -->
+        <Grid Grid.Row="0" RowDefinitions="Auto,*">
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="12,8,12,4">
+                <FontIcon Grid.Column="0" Glyph="&#xE730;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                          Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                          VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBlock Grid.Column="1" x:Name="QuickAccessLabel" FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+            </Grid>
+            <StackPanel Grid.Row="1" x:Name="QuickAccessContainer" Spacing="1" Margin="8,0,8,4" />
+        </Grid>
+
+        <!-- Divider -->
+        <Border Grid.Row="1" Height="1"
+                Background="{ThemeResource CardStrokeColorDefaultBrush}"
+                Margin="12,4" />
+
         <!-- Favorites panel -->
         <controls:FavoritesPanel
-            Grid.Row="0"
+            Grid.Row="2"
             x:Name="Favorites" />
 
         <!-- Divider -->
         <Border
-            Grid.Row="1"
+            Grid.Row="3"
             Height="1"
             Background="{ThemeResource CardStrokeColorDefaultBrush}"
             Margin="12,4" />
 
         <!-- Folder tree -->
-        <Grid Grid.Row="2" RowDefinitions="Auto,*">
+        <Grid Grid.Row="4" RowDefinitions="Auto,*">
             <TextBlock
                 Grid.Row="0"
                 x:Name="FoldersLabel"
@@ -34,6 +51,8 @@
                 Grid.Row="1"
                 x:Name="FolderTreeView"
                 SelectionChanged="OnFolderSelected"
+                AllowDrop="True"
+                DragOver="OnFolderDragOver" Drop="OnFolderDrop"
                 Padding="8,4" />
         </Grid>
     </Grid>

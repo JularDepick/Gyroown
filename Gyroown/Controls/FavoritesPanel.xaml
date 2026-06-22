@@ -22,7 +22,7 @@
     <Grid RowDefinitions="Auto,Auto,*">
         <!-- Header -->
         <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" Margin="12,8,12,4">
-            <FontIcon Grid.Column="0" Glyph="&#xE734;" FontSize="14"
+            <FontIcon Grid.Column="0" Glyph="&#xE734;" FontFamily="Segoe MDL2 Assets" FontSize="14"
                       Foreground="{ThemeResource AccentFillColorDefaultBrush}"
                       VerticalAlignment="Center" Margin="0,0,6,0" />
             <TextBlock Grid.Column="1" x:Name="HeaderText" FontWeight="SemiBold"
@@ -30,7 +30,7 @@
             <Button Grid.Column="2" x:Name="ToggleBtn" Click="OnToggleExpand"
                     Style="{StaticResource SmallIconButtonStyle}" Padding="4,2"
                     AutomationProperties.Name="Expand/Collapse">
-                <FontIcon x:Name="ToggleIcon" Glyph="&#xE70D;" FontSize="12" />
+                <FontIcon x:Name="ToggleIcon" Glyph="&#xE70D;" FontFamily="Segoe MDL2 Assets" FontSize="12" />
             </Button>
         </Grid>
 

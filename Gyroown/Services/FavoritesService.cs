@@ -20,9 +20,7 @@ public class FavoritesService
 
     public FavoritesService()
     {
-        _filePath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".Gyroown", "favorites.gyrojson");
+        _filePath = Constants.FavoritesFile;
     }
 
     /// <summary>Initialize with vault key. Call after vault is unlocked.</summary>

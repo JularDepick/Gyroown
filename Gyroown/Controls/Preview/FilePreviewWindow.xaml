@@ -21,11 +21,11 @@
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
                 <Button x:Name="PrevBtn" Click="OnPrevFile" Width="32" Height="28"
                         AutomationProperties.Name="Previous File">
-                    <FontIcon Glyph="&#xE72B;" FontSize="14" />
+                    <FontIcon Glyph="&#xE72B;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
                 </Button>
                 <Button x:Name="NextBtn" Click="OnNextFile" Width="32" Height="28"
                         AutomationProperties.Name="Next File">
-                    <FontIcon Glyph="&#xE72A;" FontSize="14" />
+                    <FontIcon Glyph="&#xE72A;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
                 </Button>
                 <TextBlock x:Name="FileCounter" VerticalAlignment="Center" Margin="8,0"
                            FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -39,7 +39,7 @@
             <!-- Close button -->
             <Button Grid.Column="4" x:Name="CloseBtn" Click="OnClose"
                     Width="32" Height="28" AutomationProperties.Name="Close">
-                <FontIcon Glyph="&#xE8BB;" FontSize="14" />
+                <FontIcon Glyph="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="14" />
             </Button>
         </Grid>
 
