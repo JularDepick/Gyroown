@@ -155,6 +155,7 @@ Gyroown/                          # 解决方案根目录
 - Release 构建: `dotnet build -c Release`
 - 编码: UTF-8 BOM
 - 代码语言: 全英文(注释/变量名),中文仅限 `lang/*.ini`
+- **INI 文件编码陷阱**: PowerShell 的 `Set-Content` 默认不保留 UTF-8 BOM,会导致中文/日文/韩文字符损坏。批量修改 INI 文件时必须使用 `[System.IO.File]::WriteAllText($path, $content, (New-Object System.Text.UTF8Encoding $true))` 保留 BOM
 
 ### 版本迭代检查清单
 版本号变更时必须同步以下位置,遗漏任何一处会导致版本不一致:

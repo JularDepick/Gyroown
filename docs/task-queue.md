@@ -1,17 +1,86 @@
 # Gyroown Task Queue
 
 > Last updated: 2026-06-22
-> Current version: v0.2.5
+> Current version: v0.1.3
 
 ---
 
-## v0.2.5 — UI Alignment Final (Current)
+## v0.1.3 — Security & Logic Fixes (Current)
 
 ### Completed
 
-- File type icons: added icons for compressed, executable, Office documents
-- Marked all remaining [改进] items as [现有] (4.4, 4.5, 5.2, 6.3, 7.2)
-- All UI alignment items now complete
+**Security — Key Material & Shared References**
+- Fix shared private key reference: ConfigService/ThemeService/FavoritesService now hold independent clones
+- Add ClearKey() to ThemeService/FavoritesService; all lock flows clear all key copies
+- Add ClearKeys()/ClearKey() to IVaultService/IThemeService interfaces
+- Fix plaintext byte[] not zeroed: ExportItemAsync, RestoreFileVersionAsync, SaveCurrentVersion
+- Fix PasswordService.ValidateAsync: zero salt/storedHash/credBytes/hash on all code paths
+
+**Security — Path Traversal & Injection**
+- ImportDirectoryAsync: validate physical dir and virtual paths against traversal
+- OnDropIn: filter paths containing '..' to prevent path injection
+- ExportDirectoryRecursiveAsync: validate export path stays within target directory (symlink/junction protection)
+- CreateFolder: reject names with path separators, null chars, invalid chars, >255 length
+- ImportItemAsync: validate file name, virtualPath, name length
+- MoveItem: verify target folder exists before allowing file move
+- RenameItem: check for duplicate names in same folder
+- DeleteFolder: prevent deletion of root folder "/"
+- GoToParent: use LastIndexOf instead of Path.GetDirectoryName for correct Unix-style paths
+- CalcEncryptedSize: add ValidateId call
+- GetPreviewData: validate previewId length (32 hex chars)
+
+**Security — Delete Ordering**
+- VaultService.DeleteItem: reorder — delete preview first, data second, meta last (prevents orphaned meta)
+
+**Race Conditions**
+- FavoritesService.Toggle/MoveToGroup/RemoveOrphans: atomic operations within single lock scope
+- FavoritesService.SaveAsync/ThemeService.SaveAsync: snapshot _vaultKey before async operations
+- ConfigService: capture _vaultKey snapshot before async operations
+- FilePreviewWindow: store MemoryStream reference for video playback, dispose in CleanupViewers
+
+**Input Validation**
+- PasswordService: null-check credential in SetupAsync/ValidateAsync/ChangePasswordAsync
+- ExportDirectoryAsync: validate virtualPath and physTargetDir
+- ImportItemAsync: null-check data stream, catch temp file creation failure
+- ExportItemAsync: null-check outStream
+- SaveMeta/LoadMeta: add id validation, ensure meta directory exists
+- CreateFolder: duplicate folder detection
+- VersionHistoryService.SaveVersion: reject empty data
+- FavoritesService: validate itemId/favoriteId/groupName in all public methods
+- FindOrphans/RemoveOrphans: null-check vaultItems
+
+**Error Handling**
+- All empty catch blocks now log via LogService (MainWindow, FilePreviewWindow, VaultService)
+- PasswordService: catch JSON deserialization errors gracefully, validate salt size
+- FavoritesService.Load: handle empty favorites file
+- ListItems: log warning for empty meta files
+- SecureDelete: handle read-only files (both VaultService and VersionHistoryService)
+- Disk space check: account for encryption overhead (+10% + 1MB margin)
+- PasswordService.SetupAsync: catch auth directory creation failure
+
+---
+
+## v0.3.2 — SaveAsync Race Condition & Null Char Guard (Current)
+
+### Completed
+
+- FavoritesService.SaveAsync: snapshot _vaultKey before async operations (prevents race on key clear)
+- ThemeService.SaveAsync: snapshot _vaultKey before async operations
+- CreateFolder: reject names containing null characters (\0)
+
+---
+
+## v0.3.1 — Orphan Detection & Path Separator Guards
+
+### Completed
+
+- Fix shared private key reference: ConfigService/ThemeService/FavoritesService now hold independent clones of vault key
+- Add ClearKey() to ThemeService and FavoritesService; all lock flows (manual/auto/tray/close-to-tray) now clear all key copies
+- Add ClearKeys() to IVaultService interface
+- Add ClearKey() to IThemeService interface
+- Fix plaintext byte[] not zeroed: ExportItemAsync (chunked + single), RestoreFileVersionAsync, SaveCurrentVersion
+- Fix PasswordService.ValidateAsync: zero salt, storedHash, storedCredBytes, hash on all code paths (success + failure)
+- Fix VaultService.DeleteItem: reorder operations — delete preview first, then data, then meta last (prevents orphaned meta on partial failure)
 
 ---
 
@@ -204,7 +273,7 @@ All core features complete. See `DEVELOP.md` section 6 for full implementation s
 
 ---
 
-## Next: v0.1.2 — Quality Polish
+## Next: v0.1.4+ — Remaining Fixes
 
 Fix remaining defects, optimize performance, polish UI details.
 
@@ -212,22 +281,22 @@ Fix remaining defects, optimize performance, polish UI details.
 
 #### P0 — Security: Path Traversal
 
-| # | Issue | Location | Notes |
-|---|-------|----------|-------|
-| 1 | VersionHistoryService: no fileId validation | All methods | `fileId` directly used in Path.Combine, can escape with `..` |
-| 2 | VaultService.DeleteItem: no id validation | Line 428 | `id` directly used in path |
-| 3 | VaultService.DeleteFolder: no path validation | Line 500 | `virtualPath` used without `..` check |
-| 4 | VaultService.CleanOrphans/CleanUndecryptable: no id validation | Lines 187, 204 | `id` directly used in path |
+| # | Issue | Location | Status | Notes |
+|---|-------|----------|--------|-------|
+| 1 | VersionHistoryService: no fileId validation | All methods | ✅ Fixed | ValidateFileId method exists |
+| 2 | VaultService.DeleteItem: no id validation | Line 428 | ✅ Fixed | ValidateId called |
+| 3 | VaultService.DeleteFolder: no path validation | Line 500 | ✅ Fixed | ValidateVirtualPath called |
+| 4 | VaultService.CleanOrphans/CleanUndecryptable: no id validation | Lines 187, 204 | ✅ Fixed | ValidateId called |
 
 #### P1 — Security: Key Material Not Zeroed
 
-| # | Issue | Location | Notes |
-|---|-------|----------|-------|
-| 5 | EncryptionService.EncryptBlob: aesKey/aesNonce not cleared | Lines 31-32 | Temporary AES key remains in memory |
-| 6 | EncryptionService.DecryptBlob: aesKey/aesNonce not cleared | Lines 68-69 | Same |
-| 7 | PasswordService.SetupAsync: credBytes not cleared | Line 43 | Password bytes in memory |
-| 8 | PasswordService.ValidateAsync: stdCredBytes not cleared | Line 94 | Password bytes in memory |
-| 9 | VaultService._priv not cleared on Lock | Field `_priv` | RSA private key persists after lock |
+| # | Issue | Location | Status | Notes |
+|---|-------|----------|--------|-------|
+| 5 | EncryptionService.EncryptBlob: aesKey/aesNonce not cleared | Lines 31-32 | ✅ Fixed | try/finally with Array.Clear |
+| 6 | EncryptionService.DecryptBlob: aesKey/aesNonce not cleared | Lines 68-69 | ✅ Fixed | try/finally with Array.Clear |
+| 7 | PasswordService.SetupAsync: credBytes not cleared | Line 43 | ✅ Fixed | Array.Clear after derive |
+| 8 | PasswordService.ValidateAsync: stdCredBytes not cleared | Line 94 | ✅ Fixed | All paths now zero salt/hash/credBytes |
+| 9 | VaultService._priv not cleared on Lock | Field `_priv` | ✅ Fixed | ClearKeys() + all services clear copies |
 
 #### P2 — Code Quality: Empty Catch Blocks
 

@@ -38,7 +38,14 @@ public class VaultService : IVaultService
     }
 
     public void Initialize(byte[] priv, byte[] pub)
-    { _priv = priv; _config.Initialize(priv); _versionHistory = new VersionHistoryService(_enc, _vaultRoot); Directory.CreateDirectory(_dataDir); Directory.CreateDirectory(_metaDir); Directory.CreateDirectory(_prevDir); }
+    {
+        _priv = (byte[])priv.Clone();
+        _config.Initialize((byte[])priv.Clone());
+        _versionHistory = new VersionHistoryService(_enc, _vaultRoot);
+        Directory.CreateDirectory(_dataDir);
+        Directory.CreateDirectory(_metaDir);
+        Directory.CreateDirectory(_prevDir);
+    }
 
     /// <summary>Clear private key from memory. Call when locking the vault.</summary>
     public void ClearKeys()
@@ -70,7 +77,7 @@ public class VaultService : IVaultService
             foreach (var f in Directory.GetFiles(AuthDir))
                 File.SetAttributes(f, File.GetAttributes(f) | FileAttributes.Hidden);
         }
-        catch { /* best effort */ }
+        catch (Exception ex) { LogService.Debug($"ProtectAuthDir: {ex.Message}"); }
     }
 
     /// <summary>
@@ -238,7 +245,7 @@ public class VaultService : IVaultService
                 var id = Path.GetFileNameWithoutExtension(f);
                 if (_priv == null) continue;
                 var blob = File.ReadAllBytes(f);
-                if (blob.Length == 0) continue;
+                if (blob.Length == 0) { LogService.Warn($"ListItems: empty meta file '{f}', skipping"); continue; }
                 var json = _enc.DecryptBlob(blob, _priv);
                 var m = JsonSerializer.Deserialize<MetaFile>(Encoding.UTF8.GetString(json), JsonConfig.Options);
                 if (m == null) continue;
@@ -275,6 +282,7 @@ public class VaultService : IVaultService
 
     private long CalcEncryptedSize(string id)
     {
+        ValidateId(id);
         var single = Path.Combine(_dataDir, id + ".gyrodt");
         if (File.Exists(single)) return new FileInfo(single).Length;
         var chunkDir = Path.Combine(_dataDir, id);
@@ -290,6 +298,7 @@ public class VaultService : IVaultService
 
     public VaultFolder GetFolderTree()
     {
+        if (_priv == null) return new VaultFolder { Name = "Gyroown", VirtualPath = "/" };
         if (File.Exists(_treeFile)) return LoadTree();
         var root = new VaultFolder { Name = "Gyroown", VirtualPath = "/" };
         SaveTree(root);
@@ -300,9 +309,19 @@ public class VaultService : IVaultService
         IProgress<double>? progress = null, CancellationToken ct = default)
     {
         EnsureInit();
+        if (data == null) throw new ArgumentNullException(nameof(data));
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("File name cannot be empty.", nameof(name));
+        if (name.Length > 255)
+            throw new ArgumentException("File name exceeds maximum length (255 characters).", nameof(name));
+        if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            throw new ArgumentException("File name contains invalid characters.", nameof(name));
+        ValidateVirtualPath(virtualPath);
 
         // Stream source to temp file with constant memory (~1MB buffer)
-        var tmpPath = Path.GetTempFileName();
+        string tmpPath;
+        try { tmpPath = Path.GetTempFileName(); }
+        catch (Exception ex) { throw new InvalidOperationException("Failed to create temp file for import. Disk may be full.", ex); }
         try
         {
             long rawLength = 0;
@@ -381,7 +400,7 @@ public class VaultService : IVaultService
         }
         finally
         {
-            try { SecureDelete(tmpPath); File.Delete(tmpPath); } catch { /* best effort */ }
+            try { SecureDelete(tmpPath); File.Delete(tmpPath); } catch (Exception ex) { LogService.Debug($"ImportItemAsync temp cleanup: {ex.Message}"); }
         }
     }
 
@@ -390,6 +409,7 @@ public class VaultService : IVaultService
     {
         EnsureInit();
         ValidateId(itemId);
+        if (outStream == null) throw new ArgumentNullException(nameof(outStream));
         var meta = LoadMeta(itemId);
 
         // P1 OOM mitigation: warn on large files so operators can plan capacity.
@@ -415,10 +435,10 @@ public class VaultService : IVaultService
                     encChunk = new byte[fs.Length];
                     await fs.ReadExactlyAsync(encChunk, ct);
                 }
-                // Decrypt, then immediately release the encrypted buffer
                 var plainChunk = _enc.DecryptBlob(encChunk, _priv!);
                 encChunk = null!;
                 await outStream.WriteAsync(plainChunk, ct);
+                Array.Clear(plainChunk);
                 progress?.Report((double)(i + 1) / meta.ChunkCount);
             }
         }
@@ -435,9 +455,9 @@ public class VaultService : IVaultService
                 await fs.ReadExactlyAsync(encData, ct);
             }
             var plain = _enc.DecryptBlob(encData, _priv!);
-            // Release encrypted buffer before writing plaintext to halve peak memory
             encData = null!;
             await outStream.WriteAsync(plain, ct);
+            Array.Clear(plain);
             progress?.Report(1.0);
         }
         await outStream.FlushAsync(ct);
@@ -450,7 +470,19 @@ public class VaultService : IVaultService
         // Clean up version history
         _versionHistory?.DeleteAllVersions(id);
 
-        var dp = Path.Combine(_dataDir, id + ".gyrodt"); var mp = Path.Combine(_metaDir, id + ".gyromt");
+        var dp = Path.Combine(_dataDir, id + ".gyrodt");
+        var mp = Path.Combine(_metaDir, id + ".gyromt");
+        // Delete preview first (non-critical)
+        try
+        {
+            if (File.Exists(mp))
+            {
+                var m = LoadMeta(id);
+                if (m.PreviewId != null) { var pp = Path.Combine(_prevDir, m.PreviewId + ".gyropv"); if (File.Exists(pp)) { SecureDelete(pp); File.Delete(pp); } }
+            }
+        }
+        catch (Exception ex) { LogService.Debug($"Preview delete failed: {ex.Message}"); }
+        // Delete data file
         if (File.Exists(dp)) { SecureDelete(dp); File.Delete(dp); }
         // Delete chunk subdirectory if any
         var chunkDir = Path.Combine(_dataDir, id);
@@ -460,17 +492,8 @@ public class VaultService : IVaultService
             { SecureDelete(f); File.Delete(f); }
             Directory.Delete(chunkDir);
         }
-        if (File.Exists(mp))
-        {
-            // Also delete preview if exists
-            try
-            {
-                var m = LoadMeta(id);
-                if (m.PreviewId != null) { var pp = Path.Combine(_prevDir, m.PreviewId + ".gyropv"); if (File.Exists(pp)) { SecureDelete(pp); File.Delete(pp); } }
-            }
-            catch (Exception ex) { LogService.Debug($"Preview delete failed: {ex.Message}"); }
-            File.Delete(mp);
-        }
+        // Delete meta file last (so if data delete fails, meta still exists for cleanup)
+        if (File.Exists(mp)) File.Delete(mp);
     }
 
     public void MoveItem(string id, string np)
@@ -478,21 +501,55 @@ public class VaultService : IVaultService
         EnsureInit();
         ValidateId(id);
         ValidateVirtualPath(np);
-        var m = LoadMeta(id); m.VirtualPath = np; SaveMeta(id, m);
+        var m = LoadMeta(id);
+        if (!m.IsFolder && np != "/")
+        {
+            // Verify target folder exists
+            var targetId = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(np)))[..32].ToLowerInvariant();
+            var targetMeta = Path.Combine(_metaDir, targetId + ".gyromt");
+            if (!File.Exists(targetMeta))
+                throw new InvalidOperationException($"Target folder '{np}' does not exist.");
+        }
+        m.VirtualPath = np;
+        SaveMeta(id, m);
     }
     public void RenameItem(string id, string nn)
     {
         EnsureInit();
         ValidateId(id);
-        ValidateVirtualPath(nn);
-        var m = LoadMeta(id); m.Name = nn; SaveMeta(id, m);
+        if (string.IsNullOrWhiteSpace(nn))
+            throw new ArgumentException("New name cannot be empty.", nameof(nn));
+        var m = LoadMeta(id);
+        if (m.Name != nn)
+        {
+            // Check for duplicate name in the same folder
+            var existing = ListItems(m.VirtualPath).FirstOrDefault(i => i.Name == nn && i.Id != id);
+            if (existing != null)
+                throw new InvalidOperationException($"An item named '{nn}' already exists in this folder.");
+        }
+        m.Name = nn;
+        SaveMeta(id, m);
     }
 
     public void CreateFolder(string name)
     {
         EnsureInit();
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Folder name cannot be empty.", nameof(name));
+        if (name.Length > 255)
+            throw new ArgumentException("Folder name exceeds maximum length (255 characters).", nameof(name));
+        if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            throw new ArgumentException("Folder name contains invalid characters.", nameof(name));
+        if (name.Contains('/') || name.Contains('\\'))
+            throw new ArgumentException("Folder name cannot contain path separators.", nameof(name));
+        if (name.Contains('\0'))
+            throw new ArgumentException("Folder name cannot contain null characters.", nameof(name));
         var virtualPath = _currentPath == "/" ? "/" + name : _currentPath + "/" + name;
+        ValidateVirtualPath(virtualPath);
         var id = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(virtualPath)))[..32].ToLowerInvariant();
+        // Check if folder already exists
+        var existingMeta = Path.Combine(_metaDir, id + ".gyromt");
+        if (File.Exists(existingMeta)) return;
         var m = new MetaFile { Name = name, VirtualPath = virtualPath, IsFolder = true, ContentType = "folder" };
         File.WriteAllBytes(Path.Combine(_metaDir, id + ".gyromt"), _enc.EncryptBlob(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(m, JsonConfig.Options)), _priv!));
 
@@ -522,6 +579,8 @@ public class VaultService : IVaultService
     {
         EnsureInit();
         ValidateVirtualPath(virtualPath);
+        if (virtualPath == "/")
+            throw new ArgumentException("Cannot delete the root folder.", nameof(virtualPath));
         // Delete all items in this folder and subfolders
         foreach (var f in Directory.GetFiles(_metaDir, "*.gyromt"))
         {
@@ -554,6 +613,7 @@ public class VaultService : IVaultService
 
     MetaFile LoadMeta(string id)
     {
+        ValidateId(id);
         var blob = File.ReadAllBytes(Path.Combine(_metaDir, id + ".gyromt"));
         var json = Encoding.UTF8.GetString(_enc.DecryptBlob(blob, _priv!));
         return JsonSerializer.Deserialize<MetaFile>(json, JsonConfig.Options)
@@ -562,7 +622,9 @@ public class VaultService : IVaultService
 
     void SaveMeta(string id, MetaFile m)
     {
+        ValidateId(id);
         m.Modified = DateTime.Now;
+        Directory.CreateDirectory(_metaDir);
         File.WriteAllBytes(Path.Combine(_metaDir, id + ".gyromt"), _enc.EncryptBlob(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(m, JsonConfig.Options)), _priv!));
     }
 
@@ -573,6 +635,10 @@ public class VaultService : IVaultService
             if (!File.Exists(path)) return;
             var sz = new FileInfo(path).Length;
             if (sz == 0) return;
+            // Remove read-only attribute if set
+            var attr = File.GetAttributes(path);
+            if ((attr & FileAttributes.ReadOnly) != 0)
+                File.SetAttributes(path, attr & ~FileAttributes.ReadOnly);
             var r = RandomNumberGenerator.GetBytes((int)Math.Min(sz, 4096));
             using var fs = new FileStream(path, FileMode.Open, FileAccess.Write);
             for (long p = 0; p < sz; p += r.Length) fs.Write(r, 0, (int)Math.Min(r.Length, sz - p));
@@ -603,7 +669,7 @@ public class VaultService : IVaultService
             if (IsVideoType(contentType))
                 return await GenerateVideoPreview(filePath, ct);
         }
-        catch { /* preview generation failure is non-fatal */ }
+        catch (Exception ex) { LogService.Debug($"GeneratePreview failed for '{filePath}': {ex.Message}"); }
         return null;
     }
 
@@ -742,7 +808,9 @@ public class VaultService : IVaultService
 
     public async Task<byte[]?> GetPreviewData(string previewId)
     {
+        if (string.IsNullOrWhiteSpace(previewId)) return null;
         if (previewId.Contains("..") || previewId.Contains('/') || previewId.Contains('\\')) return null;
+        if (previewId.Length != 32) return null;
         var path = Path.Combine(_prevDir, previewId + ".gyropv");
         if (!File.Exists(path) || _priv == null) return null;
         var blob = await File.ReadAllBytesAsync(path);
@@ -880,6 +948,7 @@ public class VaultService : IVaultService
         // Update metadata
         meta.OriginalSize = data.Length;
         SaveMeta(fileId, meta);
+        Array.Clear(data);
     }
 
     /// <summary>Save the current file version (called before overwrite).</summary>
@@ -889,10 +958,10 @@ public class VaultService : IVaultService
         ValidateId(fileId);
         if (_versionHistory == null || _priv == null) return null;
 
+        byte[]? data = null;
         try
         {
             var meta = LoadMeta(fileId);
-            byte[] data;
 
             if (meta.ChunkCount > 0)
             {
@@ -928,6 +997,10 @@ public class VaultService : IVaultService
             LogService.Warn($"SaveCurrentVersion: failed for '{fileId}': {ex.Message}");
             return null;
         }
+        finally
+        {
+            if (data != null) Array.Clear(data);
+        }
     }
 
     /// <summary>Restore file to the specified version (synchronous, returns decrypted data).</summary>
@@ -955,20 +1028,26 @@ public class VaultService : IVaultService
     public async Task<int> ImportDirectoryAsync(string dirPath, IProgress<string>? fileProgress = null, CancellationToken ct = default)
     {
         EnsureInit();
+        if (string.IsNullOrWhiteSpace(dirPath))
+            throw new ArgumentException("Directory path cannot be empty.", nameof(dirPath));
         if (!Directory.Exists(dirPath)) throw new DirectoryNotFoundException($"Directory not found: {dirPath}");
 
         var dirName = Path.GetFileName(dirPath);
-        var basePath = _currentPath == "/" ? "/" + dirName : _currentPath + "/" + dirName;
+        if (string.IsNullOrEmpty(dirName))
+            throw new ArgumentException("Invalid directory path.", nameof(dirPath));
 
-        int imported = 0;
-        await ImportDirectoryRecursiveAsync(dirPath, basePath, fileProgress, ct, imported);
-        return imported;
+        var basePath = _currentPath == "/" ? "/" + dirName : _currentPath + "/" + dirName;
+        ValidateVirtualPath(basePath);
+
+        var counter = new Counter();
+        await ImportDirectoryRecursiveAsync(dirPath, basePath, fileProgress, ct, counter);
+        return counter.Value;
     }
 
-    private async Task<int> ImportDirectoryRecursiveAsync(string physDir, string virtPath, IProgress<string>? fileProgress, CancellationToken ct, int count)
+    private async Task ImportDirectoryRecursiveAsync(string physDir, string virtPath, IProgress<string>? fileProgress, CancellationToken ct, Counter counter)
     {
         var saved = _currentPath;
-        var parentPath = Path.GetDirectoryName(virtPath.Replace('\\', '/'))?.Replace('\\', '/') ?? "/";
+        var parentPath = LastIndexOfSlash(virtPath);
         if (string.IsNullOrEmpty(parentPath)) parentPath = "/";
         _currentPath = parentPath;
         CreateFolder(Path.GetFileName(physDir));
@@ -982,7 +1061,7 @@ public class VaultService : IVaultService
             _currentPath = virtPath;
             await ImportItemAsync(fs, Path.GetFileName(file));
             _currentPath = saved;
-            count++;
+            counter.Value++;
         }
 
         foreach (var subDir in Directory.GetDirectories(physDir))
@@ -990,21 +1069,36 @@ public class VaultService : IVaultService
             ct.ThrowIfCancellationRequested();
             var subName = Path.GetFileName(subDir);
             var subVirtPath = virtPath + "/" + subName;
-            count = await ImportDirectoryRecursiveAsync(subDir, subVirtPath, fileProgress, ct, count);
+            await ImportDirectoryRecursiveAsync(subDir, subVirtPath, fileProgress, ct, counter);
         }
+    }
 
-        return count;
+    class Counter { public int Value; }
+
+    static string LastIndexOfSlash(string path)
+    {
+        var idx = path.Replace('\\', '/').LastIndexOf('/');
+        return idx <= 0 ? "/" : path[..idx];
     }
 
     /// <summary>Export a virtual folder to a physical directory recursively.</summary>
     public async Task<int> ExportDirectoryAsync(string virtualPath, string physTargetDir, IProgress<string>? fileProgress = null, CancellationToken ct = default)
     {
         EnsureInit();
+        ValidateVirtualPath(virtualPath);
+        if (string.IsNullOrWhiteSpace(physTargetDir))
+            throw new ArgumentException("Target directory cannot be empty.", nameof(physTargetDir));
         return await ExportDirectoryRecursiveAsync(virtualPath, physTargetDir, fileProgress, ct, 0);
     }
 
     private async Task<int> ExportDirectoryRecursiveAsync(string virtualPath, string physDir, IProgress<string>? fileProgress, CancellationToken ct, int count)
     {
+        // Prevent writing outside the target directory (symbolic link / junction attack)
+        var fullPath = Path.GetFullPath(physDir);
+        var basePath = Path.GetFullPath(Path.GetDirectoryName(fullPath) ?? fullPath);
+        if (!fullPath.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Export path resolves outside target directory.", nameof(physDir));
+
         Directory.CreateDirectory(physDir);
 
         var items = ListItems(virtualPath);

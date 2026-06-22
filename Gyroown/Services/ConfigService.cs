@@ -37,10 +37,11 @@ public class ConfigService
     {
         try
         {
-            if (File.Exists(_configPath) && _vaultKey != null)
+            var key = _vaultKey;
+            if (File.Exists(_configPath) && key != null)
             {
                 var blob = File.ReadAllBytes(_configPath);
-                var json = _enc.DecryptBlob(blob, _vaultKey);
+                var json = _enc.DecryptBlob(blob, key);
                 return JsonSerializer.Deserialize<CoreConfig>(Encoding.UTF8.GetString(json), JsonConfig.Options)
                        ?? new CoreConfig();
             }
@@ -51,11 +52,12 @@ public class ConfigService
 
     public async Task SaveAsync(CoreConfig config)
     {
-        if (_vaultKey == null) return;
+        var key = _vaultKey;
+        if (key == null) return;
         try
         {
             var json = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(config, JsonConfig.Options));
-            var blob = _enc.EncryptBlob(json, _vaultKey);
+            var blob = _enc.EncryptBlob(json, key);
             Directory.CreateDirectory(Path.GetDirectoryName(_configPath)!);
             await File.WriteAllBytesAsync(_configPath, blob);
         }

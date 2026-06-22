@@ -30,14 +30,22 @@ public class PasswordService : IPasswordService
             if (!IsPasswordSet) return null;
             var data = JsonSerializer.Deserialize<PasswordFileData>(File.ReadAllText(_passwordFile), JsonConfig.Options);
             if (data?.Salt == null) return null;
-            return Convert.FromBase64String(data.Salt);
+            var salt = Convert.FromBase64String(data.Salt);
+            if (salt.Length != SaltSize)
+            {
+                LogService.Warn("PasswordService.GetStoredSalt: invalid salt size, password file may be corrupted");
+                return null;
+            }
+            return salt;
         }
         catch (Exception ex) { LogService.Warn($"PasswordService.GetStoredSalt: {ex.Message}"); return null; }
     }
 
     public Task SetupAsync(object credential)
     {
-        Directory.CreateDirectory(_authDir);
+        if (credential == null) throw new ArgumentNullException(nameof(credential));
+        try { Directory.CreateDirectory(_authDir); }
+        catch (Exception ex) { throw new InvalidOperationException($"Failed to create auth directory: {ex.Message}", ex); }
         VaultService.ProtectAuthDir();
         var salt = RandomNumberGenerator.GetBytes(SaltSize);
         var credBytes = SerializeCredential(credential);
@@ -56,8 +64,18 @@ public class PasswordService : IPasswordService
 
     public Task<PasswordValidationResult> ValidateAsync(object credential)
     {
+        if (credential == null) return Task.FromResult(new PasswordValidationResult { IsValid = false, ErrorMessage = "Credential cannot be null." });
         if (!IsPasswordSet) return Task.FromResult(new PasswordValidationResult { IsValid = false, ErrorMessage = "Password not set." });
-        var data = JsonSerializer.Deserialize<PasswordFileData>(File.ReadAllText(_passwordFile), JsonConfig.Options);
+        PasswordFileData? data;
+        try
+        {
+            data = JsonSerializer.Deserialize<PasswordFileData>(File.ReadAllText(_passwordFile), JsonConfig.Options);
+        }
+        catch (Exception ex)
+        {
+            LogService.Error($"PasswordService.ValidateAsync: password file corrupted: {ex.Message}");
+            return Task.FromResult(new PasswordValidationResult { IsValid = false, ErrorMessage = "Password file corrupted." });
+        }
         if (data == null) return Task.FromResult(new PasswordValidationResult { IsValid = false, ErrorMessage = "Password file corrupted." });
         var salt = Convert.FromBase64String(data.Salt);
         var storedHash = Convert.FromBase64String(data.Hash);
@@ -67,7 +85,10 @@ public class PasswordService : IPasswordService
         {
             var storedPoints = ParsePicturePoints(data.PicturePoints);
             if (storedPoints.Length != inputPoints.Length)
+            {
+                Array.Clear(salt); Array.Clear(storedHash);
                 return Task.FromResult(new PasswordValidationResult { IsValid = false, ErrorMessage = "Incorrect password." });
+            }
 
             var tolerance = new Models.PasswordConfig().PictureToleranceRatio; // 0.05
             var toleranceSquared = tolerance * tolerance;
@@ -81,11 +102,15 @@ public class PasswordService : IPasswordService
             }
 
             if (!allMatch)
+            {
+                Array.Clear(salt); Array.Clear(storedHash);
                 return Task.FromResult(new PasswordValidationResult { IsValid = false, ErrorMessage = "Incorrect password." });
+            }
 
             // Match: derive key from stored coordinates for consistency
             var storedCredBytes = Encoding.UTF8.GetBytes(data.PicturePoints);
             var userKey = Rfc2898DeriveBytes.Pbkdf2(storedCredBytes, salt, data.Iterations, HashAlgorithmName.SHA256, UserKeySize);
+            Array.Clear(storedCredBytes); Array.Clear(salt); Array.Clear(storedHash);
             lock (_lock) _userKey = userKey;
             Unlocked?.Invoke(this, EventArgs.Empty);
             return Task.FromResult(new PasswordValidationResult { IsValid = true, UserKey = userKey });
@@ -95,12 +120,13 @@ public class PasswordService : IPasswordService
         var stdCredBytes = SerializeCredential(credential);
         var stdUserKey = Rfc2898DeriveBytes.Pbkdf2(stdCredBytes, salt, data.Iterations, HashAlgorithmName.SHA256, UserKeySize);
         var hash = Rfc2898DeriveBytes.Pbkdf2(stdUserKey, salt, data.Iterations, HashAlgorithmName.SHA256, HashSize);
-        Array.Clear(stdCredBytes);
+        Array.Clear(stdCredBytes); Array.Clear(salt);
         if (!CryptographicOperations.FixedTimeEquals(hash, storedHash))
         {
-            Array.Clear(stdUserKey);
+            Array.Clear(stdUserKey); Array.Clear(hash); Array.Clear(storedHash);
             return Task.FromResult(new PasswordValidationResult { IsValid = false, ErrorMessage = "Incorrect password." });
         }
+        Array.Clear(hash); Array.Clear(storedHash);
         lock (_lock) _userKey = stdUserKey;
         Unlocked?.Invoke(this, EventArgs.Empty);
         return Task.FromResult(new PasswordValidationResult { IsValid = true, UserKey = stdUserKey });
@@ -120,6 +146,7 @@ public class PasswordService : IPasswordService
 
     public async Task<(byte[] OldUserKey, byte[] NewUserKey)> ChangePasswordAsync(object oldCred, object newCred)
     {
+        if (newCred == null) throw new ArgumentNullException(nameof(newCred));
         var r = await ValidateAsync(oldCred);
         if (!r.IsValid) throw new InvalidOperationException("Old password is incorrect.");
         var oldUk = r.UserKey!;

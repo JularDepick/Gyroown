@@ -1,4 +1,4 @@
-﻿using Gyroown.Models;
+using Gyroown.Models;
 
 namespace Gyroown.Services;
 
@@ -63,4 +63,7 @@ public interface IVaultService
 
     /// <summary>Save the current file version (called before overwrite).</summary>
     FileVersionRecord? SaveCurrentVersion(string fileId, string description = "");
+
+    /// <summary>Clear private key from memory. Call when locking the vault.</summary>
+    void ClearKeys();
 }

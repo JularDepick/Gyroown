@@ -1,4 +1,4 @@
-﻿namespace Gyroown.Services;
+namespace Gyroown.Services;
 
 /// <summary>
 /// Application theme enum.
@@ -39,6 +39,9 @@ public interface IThemeService
 
     /// <summary>Get all available themes.</summary>
     IReadOnlyList<AppTheme> GetAvailableThemes();
+
+    /// <summary>Clear vault key from memory. Call when locking the vault.</summary>
+    void ClearKey();
 
     /// <summary>Fired when theme, accent, or language changes.</summary>
     event EventHandler? ThemeChanged;
