@@ -25,7 +25,7 @@
 - **国际化**：默认简体中文，支持 INI 语言包切换
 - **8 套强调色** + 系统/浅色/深色主题
 
-v0.1.0 · [GitHub](https://github.com/JularDepick/Gyroown)
+v0.1.4 · [GitHub](https://github.com/JularDepick/Gyroown)
 
 所有功能已完整实现。单窗口设计：密码设置/解锁/文件管理/设置均在同一窗口内。
 
@@ -45,36 +45,49 @@ v0.1.0 · [GitHub](https://github.com/JularDepick/Gyroown)
 
 ```
 Gyroown/
-├── App.xaml / App.xaml.cs
-├── MainWindow.xaml / .cs           # 文件管理器主窗口
-├── lang/                           # 语言包 (INI)
-│   ├── zh-CN.ini                   # 简体中文（默认）
-│   └── en-US.ini                   # English
-├── Controls/                       # 自定义 UI 控件
-│   ├── VaultFileListView           # 多视图文件列表
-│   ├── VaultSidebar                # 虚拟目录树
-│   ├── VaultStatusBar              # 状态栏
-│   └── TitleBarControl             # 自定义标题栏
-├── Views/                          # 控件
-│   ├── IPasswordControl            # 密码控件统一接口
-│   ├── UnlockControl               # 解锁控件
-│   ├── PasswordSetupControl        # 密码设置控件
-│   ├── PinPasswordControl          # 6 位 PIN
-│   ├── GesturePasswordControl      # 九宫格手势
-│   ├── CustomPasswordControl       # 自定义密码
-│   └── PicturePasswordControl      # 图片密码
-├── Models/                         # 数据模型
+├── App.xaml / App.xaml.cs           # 入口
+├── AppInfo.cs                       # 版本元数据
+├── Constants.cs                     # 全局常量
+├── MainWindow.xaml / .cs            # 文件管理器主窗口
+├── lang/                            # 语言包 (7种语言)
+│   ├── zh-CN.ini                    # 简体中文（默认）
+│   ├── zh-TW.ini                    # 繁体中文
+│   ├── en-US.ini                    # English (US)
+│   ├── en-GB.ini                    # English (UK)
+│   ├── ja-JP.ini                    # 日本語
+│   ├── ko-KR.ini                    # 한국어
+│   └── fr-FR.ini                    # Français
+├── Controls/                        # 自定义 UI 控件
+│   ├── VaultFileListView            # 多视图文件列表
+│   ├── VaultSidebar                 # 虚拟目录树
+│   ├── VaultStatusBar               # 状态栏
+│   ├── TitleBarControl              # 自定义标题栏
+│   ├── FavoritesPanel               # 收藏夹面板
+│   ├── CursorBorder                 # 光标样式辅助
+│   └── Preview/                     # 媒体预览
+├── Views/                           # 控件
+│   ├── IPasswordControl             # 密码控件统一接口
+│   ├── UnlockControl                # 解锁控件
+│   ├── PasswordSetupControl         # 密码设置控件
+│   ├── PinPasswordControl           # 6 位 PIN
+│   ├── GesturePasswordControl       # 九宫格手势
+│   ├── CustomPasswordControl        # 自定义密码
+│   └── PicturePasswordControl       # 图片密码
+├── Models/                          # 数据模型
 │   ├── VaultFileItem / VaultFolder
 │   ├── PasswordType / PasswordConfig
-├── Services/                       # 接口 + 实现
-│   ├── PasswordService             # PBKDF2 密码哈希/验证
-│   ├── EncryptionService           # RSA 2048 + AES-256-GCM
-│   ├── VaultService                # 加密文件仓库
-│   ├── ThemeService                # 主题 + 强调色管理
-│   ├── DragDropService             # 拖放协调
-│   ├── Loc                         # 静态本地化辅助类
-│   └── ILocalizationService        # 语言包接口
-└── Gyroown.csproj                  # .NET 8 + WinUI 3
+├── Services/                        # 接口 + 实现
+│   ├── PasswordService              # PBKDF2 密码哈希/验证
+│   ├── EncryptionService            # RSA 2048 + AES-256-GCM
+│   ├── VaultService                 # 加密文件仓库
+│   ├── ThemeService                 # 主题 + 强调色管理
+│   ├── DragDropService              # 拖放协调
+│   ├── Loc                          # 静态本地化辅助类
+│   ├── ILocalizationService         # 语言包接口
+│   ├── ConfigService                # 加密配置
+│   ├── FavoritesService             # 收藏夹管理
+│   └── VersionHistoryService        # 文件版本历史
+└── Gyroown.csproj                   # .NET 8 + WinUI 3
 ```
 
 ### 技术栈
@@ -97,6 +110,5 @@ Gyroown/
 
 ### 开发文档
 
-- [开发计划](docs/plans.ai/v0.1.0-20260526.md)
-- [架构与接口细节](docs/DEVELOP.md)
-- [设计决策记录](docs/UserThoughts.md)
+- [修复脚本](scripts/fix_vault/README_zh-CN.md)
+- [翻译工具](tools/transIniToDll/README_zh-CN.md)

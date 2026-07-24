@@ -25,7 +25,7 @@ A fully local, offline dynamic encrypted repository that safeguards your data wh
 - **i18n**: default Simplified Chinese, INI language pack switching
 - **8 accent presets** + system/light/dark themes
 
-v0.1.0 · [GitHub](https://github.com/JularDepick/Gyroown)
+v0.1.4 · [GitHub](https://github.com/JularDepick/Gyroown)
 
 All features fully implemented. Single-window design: setup / unlock / file management / settings all in one window.
 
@@ -45,36 +45,49 @@ All features fully implemented. Single-window design: setup / unlock / file mana
 
 ```
 Gyroown/
-├── App.xaml / App.xaml.cs
-├── MainWindow.xaml / .cs           # Main window
-├── lang/                           # Language packs (INI)
-│   ├── zh-CN.ini                   # Simplified Chinese (default)
-│   └── en-US.ini                   # English
-├── Controls/                       # Custom controls
-│   ├── VaultFileListView           # Multi-view file list
-│   ├── VaultSidebar                # Virtual directory tree
-│   ├── VaultStatusBar              # Status bar
-│   └── TitleBarControl             # Custom title bar
-├── Views/                          # View controls
-│   ├── IPasswordControl            # Password control interface
-│   ├── UnlockControl               # Unlock view
-│   ├── PasswordSetupControl        # Password setup view
-│   ├── PinPasswordControl          # 6-digit PIN
-│   ├── GesturePasswordControl      # Gesture pattern
-│   ├── CustomPasswordControl       # Custom password
-│   └── PicturePasswordControl      # Picture password
-├── Models/                         # Data models
+├── App.xaml / App.xaml.cs           # Entry point
+├── AppInfo.cs                       # Version metadata
+├── Constants.cs                     # Global constants
+├── MainWindow.xaml / .cs            # Main window
+├── lang/                            # Language packs (7 languages)
+│   ├── zh-CN.ini                    # Simplified Chinese (default)
+│   ├── zh-TW.ini                    # Traditional Chinese
+│   ├── en-US.ini                    # English (US)
+│   ├── en-GB.ini                    # English (UK)
+│   ├── ja-JP.ini                    # Japanese
+│   ├── ko-KR.ini                    # Korean
+│   └── fr-FR.ini                    # French
+├── Controls/                        # Custom controls
+│   ├── VaultFileListView            # Multi-view file list
+│   ├── VaultSidebar                 # Virtual directory tree
+│   ├── VaultStatusBar               # Status bar
+│   ├── TitleBarControl              # Custom title bar
+│   ├── FavoritesPanel               # Favorites panel
+│   ├── CursorBorder                 # Cursor style helper
+│   └── Preview/                     # Media preview
+├── Views/                           # View controls
+│   ├── IPasswordControl             # Password control interface
+│   ├── UnlockControl                # Unlock view
+│   ├── PasswordSetupControl         # Password setup view
+│   ├── PinPasswordControl           # 6-digit PIN
+│   ├── GesturePasswordControl       # Gesture pattern
+│   ├── CustomPasswordControl        # Custom password
+│   └── PicturePasswordControl       # Picture password
+├── Models/                          # Data models
 │   ├── VaultFileItem / VaultFolder
 │   ├── PasswordType / PasswordConfig
-├── Services/                       # Interfaces + implementations
-│   ├── PasswordService             # PBKDF2 password hashing
-│   ├── EncryptionService           # RSA 2048 + AES-256-GCM
-│   ├── VaultService                # Encrypted file storage
-│   ├── ThemeService                # Theme + accent management
-│   ├── DragDropService             # Drag-drop coordination
-│   ├── Loc                         # Static localization helper
-│   └── ILocalizationService        # Language pack interface
-└── Gyroown.csproj                  # .NET 8 + WinUI 3
+├── Services/                        # Interfaces + implementations
+│   ├── PasswordService              # PBKDF2 password hashing
+│   ├── EncryptionService            # RSA 2048 + AES-256-GCM
+│   ├── VaultService                 # Encrypted file storage
+│   ├── ThemeService                 # Theme + accent management
+│   ├── DragDropService              # Drag-drop coordination
+│   ├── Loc                          # Static localization helper
+│   ├── ILocalizationService         # Language pack interface
+│   ├── ConfigService                # Encryption config
+│   ├── FavoritesService             # Favorites management
+│   └── VersionHistoryService        # File version history
+└── Gyroown.csproj                   # .NET 8 + WinUI 3
 ```
 
 ### Tech Stack
@@ -97,6 +110,5 @@ Gyroown/
 
 ### Documentation
 
-- [Development Plan](docs/plans.ai/v0.1.0-20260526.md)
-- [Architecture & Interface Details](docs/DEVELOP.md)
-- [Design Decision Log](docs/UserThoughts.md)
+- [Development Scripts](scripts/fix_vault/README.md)
+- [Translation Tool](tools/transIniToDll/README.md)
