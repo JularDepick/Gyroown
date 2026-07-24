@@ -24,7 +24,7 @@ public class ConfigService
 
     public void Initialize(byte[] vaultKey)
     {
-        _vaultKey = vaultKey;
+        _vaultKey = (byte[])vaultKey.Clone();
     }
 
     /// <summary>Clear vault key from memory.</summary>

@@ -39,10 +39,16 @@ public sealed partial class VaultFileListView : UserControl
     public event EventHandler<VaultFileItem>? VersionHistoryRequested;
     public event EventHandler<IReadOnlyList<VaultFileItem>>? BatchDeleteRequested;
     public event EventHandler<IReadOnlyList<VaultFileItem>>? BatchExportRequested;
+    public event EventHandler<IReadOnlyList<VaultFileItem>>? CopyRequested;
+    public event EventHandler<IReadOnlyList<VaultFileItem>>? CutRequested;
+    public event EventHandler? PasteRequested;
     public event EventHandler? SelectionChanged;
     /// <summary>Raised when user taps the favorite star on an item.</summary>
     public event EventHandler<VaultFileItem>? FavoriteToggleRequested;
     public Func<string, string, Task>? DecryptToFile { get; set; }
+
+    /// <summary>Whether the clipboard has items available for paste. Set by MainWindow.</summary>
+    public bool HasClipboardItems { get; set; }
 
     public VaultFileListView()
     {
@@ -254,8 +260,9 @@ public sealed partial class VaultFileListView : UserControl
         // Replace ItemsSource to force full re-render
         _items = new ObservableCollection<VaultFileItem>(q);
 
-        // Mark search matches for highlighting
-        var searchQuery = _filter ?? "";
+        // Mark search matches for highlighting (use parsed query to strip advanced syntax)
+        var parsedQuery = ParseSearchQuery(_filter ?? "");
+        var searchQuery = parsedQuery.NamePart ?? "";
         foreach (var item in _items)
         {
             item.IsSearchMatch = !string.IsNullOrWhiteSpace(searchQuery)
@@ -279,6 +286,8 @@ public sealed partial class VaultFileListView : UserControl
             ? string.Format(Loc.Get("FileList", "NoResults"),
                 string.IsNullOrWhiteSpace(emptySearchText) ? Loc.Get("FileList", "AdvancedSearch") : emptySearchText)
             : Loc.Get("FileList", "EmptyFolder");
+
+        UpdateSortHeaders();
     }
 
     void OnClearFilters(object s, RoutedEventArgs e)
@@ -369,41 +378,7 @@ public sealed partial class VaultFileListView : UserControl
     {
         if (s is not MenuFlyoutItem item) return;
         var mode = item.Tag?.ToString() ?? "details";
-        _currentViewMode = mode;
-
-        // Hide all views
-        FileList.Visibility = Visibility.Collapsed;
-        FileGrid.Visibility = Visibility.Collapsed;
-        FileGridMedium.Visibility = Visibility.Collapsed;
-        FileGridSmall.Visibility = Visibility.Collapsed;
-        FileListCompact.Visibility = Visibility.Collapsed;
-        HeaderRow.Visibility = Visibility.Collapsed;
-
-        // Show selected view
-        switch (mode)
-        {
-            case "details":
-                FileList.Visibility = Visibility.Visible;
-                HeaderRow.Visibility = Visibility.Visible;
-                ViewModeBtn.Content = new FontIcon { Glyph = "\uE8A1", FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe MDL2 Assets"), FontSize = 14 };
-                break;
-            case "large":
-                FileGrid.Visibility = Visibility.Visible;
-                ViewModeBtn.Content = new FontIcon { Glyph = "\uE8A9", FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe MDL2 Assets"), FontSize = 14 };
-                break;
-            case "medium":
-                FileGridMedium.Visibility = Visibility.Visible;
-                ViewModeBtn.Content = new FontIcon { Glyph = "\uE8A9", FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe MDL2 Assets"), FontSize = 12 };
-                break;
-            case "small":
-                FileGridSmall.Visibility = Visibility.Visible;
-                ViewModeBtn.Content = new FontIcon { Glyph = "\uE8A9", FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe MDL2 Assets"), FontSize = 10 };
-                break;
-            case "list":
-                FileListCompact.Visibility = Visibility.Visible;
-                ViewModeBtn.Content = new FontIcon { Glyph = "\uE8A1", FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe MDL2 Assets"), FontSize = 14 };
-                break;
-        }
+        SwitchToView(mode);
     }
 
     /// <summary>Switch to a specific view mode (details, large, medium, small, list).</summary>
@@ -495,6 +470,10 @@ public sealed partial class VaultFileListView : UserControl
 
             emptyMenu.Items.Add(newFolder);
             emptyMenu.Items.Add(new MenuFlyoutSeparator());
+            var paste = new MenuFlyoutItem { Text = Loc.Get("FileList", "Paste"), Icon = new FontIcon { Glyph = "" } };
+            paste.Click += (_, _) => PasteRequested?.Invoke(this, EventArgs.Empty);
+            paste.IsEnabled = HasClipboardItems;
+            emptyMenu.Items.Add(paste);
             emptyMenu.Items.Add(refresh);
 
             var emptySource = source ?? (s as FrameworkElement);
@@ -506,8 +485,14 @@ public sealed partial class VaultFileListView : UserControl
         var sel = SelectedItems;
         if (!sel.Contains(item))
         {
-            if (FileList.Visibility == Visibility.Visible) FileList.SelectedItem = item;
-            else FileGrid.SelectedItem = item;
+            switch (_currentViewMode)
+            {
+                case "details": FileList.SelectedItem = item; break;
+                case "large": FileGrid.SelectedItem = item; break;
+                case "medium": FileGridMedium.SelectedItem = item; break;
+                case "small": FileGridSmall.SelectedItem = item; break;
+                case "list": FileListCompact.SelectedItem = item; break;
+            }
             sel = new List<VaultFileItem> { item };
         }
 
@@ -519,7 +504,14 @@ public sealed partial class VaultFileListView : UserControl
             batchExport.Click += (_, _) => BatchExportRequested?.Invoke(this, sel);
             var batchDelete = new MenuFlyoutItem { Text = string.Format(Loc.Get("FileList", "BatchDelete"), sel.Count), Icon = new FontIcon { Glyph = "\uE74D" } };
             batchDelete.Click += (_, _) => BatchDeleteRequested?.Invoke(this, sel);
+            var batchCut = new MenuFlyoutItem { Text = string.Format(Loc.Get("FileList", "BatchCut"), sel.Count), Icon = new FontIcon { Glyph = "" } };
+            batchCut.Click += (_, _) => CutRequested?.Invoke(this, sel);
+            var batchCopy = new MenuFlyoutItem { Text = string.Format(Loc.Get("FileList", "BatchCopy"), sel.Count), Icon = new FontIcon { Glyph = "" } };
+            batchCopy.Click += (_, _) => CopyRequested?.Invoke(this, sel);
 
+            menu.Items.Add(batchCut);
+            menu.Items.Add(batchCopy);
+            menu.Items.Add(new MenuFlyoutSeparator());
             menu.Items.Add(batchExport);
             menu.Items.Add(new MenuFlyoutSeparator());
             menu.Items.Add(batchDelete);
@@ -538,10 +530,16 @@ public sealed partial class VaultFileListView : UserControl
             rename.Click += (_, _) => RenameRequested?.Invoke(this, item);
             var delete = new MenuFlyoutItem { Text = Loc.Get("FileList", "Delete"), Icon = new FontIcon { Glyph = "\uE74D" } };
             delete.Click += (_, _) => BatchDeleteRequested?.Invoke(this, new List<VaultFileItem> { item });
+            var cut = new MenuFlyoutItem { Text = Loc.Get("FileList", "Cut"), Icon = new FontIcon { Glyph = "\uE8C6" } };
+            cut.Click += (_, _) => CutRequested?.Invoke(this, sel);
+            var copy = new MenuFlyoutItem { Text = Loc.Get("FileList", "Copy"), Icon = new FontIcon { Glyph = "\uE8C8" } };
+            copy.Click += (_, _) => CopyRequested?.Invoke(this, sel);
 
             menu.Items.Add(fav);
             menu.Items.Add(new MenuFlyoutSeparator());
             menu.Items.Add(open);
+            menu.Items.Add(cut);
+            menu.Items.Add(copy);
             menu.Items.Add(export);
             menu.Items.Add(rename);
             if (!item.IsFolder)
@@ -563,19 +561,48 @@ public sealed partial class VaultFileListView : UserControl
 
     void OnListKeyDown(object s, KeyRoutedEventArgs e)
     {
-        if (e.Key == Windows.System.VirtualKey.Delete)
-        {
-            var sel = SelectedItems;
-            if (sel.Count > 0)
-                BatchDeleteRequested?.Invoke(this, sel);
-            e.Handled = true;
-        }
-        else if (e.Key == Windows.System.VirtualKey.F2)
+        // Delete key is handled by MainWindow.OnPreviewKeyDown to avoid double-handling
+        if (e.Key == Windows.System.VirtualKey.F2)
         {
             var sel = (s is ListView lv ? lv.SelectedItem : (s is GridView gv ? gv.SelectedItem : null)) as VaultFileItem;
             if (sel != null) StartInlineRename(sel);
             e.Handled = true;
         }
+        // Skip clipboard shortcuts if a text input is focused (allow native copy/paste in TextBox)
+        else if (_activeRenameBox != null)
+        {
+            // Let the rename TextBox handle clipboard shortcuts naturally
+            return;
+        }
+        // Ctrl+C = Copy
+        else if (e.Key == Windows.System.VirtualKey.C && IsCtrlPressed())
+        {
+            var sel = SelectedItems;
+            if (sel.Count > 0)
+                CopyRequested?.Invoke(this, sel);
+            e.Handled = true;
+        }
+        // Ctrl+X = Cut
+        else if (e.Key == Windows.System.VirtualKey.X && IsCtrlPressed())
+        {
+            var sel = SelectedItems;
+            if (sel.Count > 0)
+                CutRequested?.Invoke(this, sel);
+            e.Handled = true;
+        }
+        // Ctrl+V = Paste
+        else if (e.Key == Windows.System.VirtualKey.V && IsCtrlPressed())
+        {
+            if (HasClipboardItems)
+                PasteRequested?.Invoke(this, EventArgs.Empty);
+            e.Handled = true;
+        }
+    }
+
+    private static bool IsCtrlPressed()
+    {
+        return (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control)
+            & Windows.UI.Core.CoreVirtualKeyStates.Down) == Windows.UI.Core.CoreVirtualKeyStates.Down;
     }
 
     // ── Inline rename ──
@@ -585,12 +612,47 @@ public sealed partial class VaultFileListView : UserControl
 
     void StartInlineRename(VaultFileItem item)
     {
-        // Find the container for this item
-        var container = FileList.ContainerFromItem(item) as ListViewItem;
-        if (container?.ContentTemplateRoot is not Grid grid || grid.Children.Count < 2) return;
+        // Find the container for this item in the active view
+        ListViewBase? activeView = _currentViewMode switch
+        {
+            "details" => FileList,
+            "large" => FileGrid,
+            "medium" => FileGridMedium,
+            "small" => FileGridSmall,
+            "list" => FileListCompact,
+            _ => FileList
+        };
+        var container = activeView.ContainerFromItem(item);
+        if (container == null) return;
 
-        // Find the name TextBlock (column 1)
-        if (grid.Children[1] is not TextBlock nameBlock) return;
+        FrameworkElement? contentRoot = container switch
+        {
+            ListViewItem lvi => lvi.ContentTemplateRoot as FrameworkElement,
+            GridViewItem gvi => gvi.ContentTemplateRoot as FrameworkElement,
+            _ => null
+        };
+
+        // For non-details views with StackPanel layout, use dialog-based rename
+        if (contentRoot is not Grid)
+        {
+            RenameRequested?.Invoke(this, item);
+            return;
+        }
+
+        var grid = (Grid)contentRoot;
+        if (grid.Children.Count < 2) return;
+
+        // Find the name TextBlock (column 1 in details view)
+        TextBlock? nameBlock = null;
+        foreach (var child in grid.Children)
+        {
+            if (child is TextBlock tb && Grid.GetColumn(tb) == 1)
+            {
+                nameBlock = tb;
+                break;
+            }
+        }
+        if (nameBlock == null) return;
 
         _renamingItem = item;
         _activeRenameBox = new TextBox

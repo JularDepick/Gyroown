@@ -1088,16 +1088,17 @@ public class VaultService : IVaultService
         ValidateVirtualPath(virtualPath);
         if (string.IsNullOrWhiteSpace(physTargetDir))
             throw new ArgumentException("Target directory cannot be empty.", nameof(physTargetDir));
-        return await ExportDirectoryRecursiveAsync(virtualPath, physTargetDir, fileProgress, ct, 0);
+        return await ExportDirectoryRecursiveAsync(virtualPath, physTargetDir, fileProgress, ct, 0, physTargetDir);
     }
 
-    private async Task<int> ExportDirectoryRecursiveAsync(string virtualPath, string physDir, IProgress<string>? fileProgress, CancellationToken ct, int count)
+    private async Task<int> ExportDirectoryRecursiveAsync(string virtualPath, string physDir, IProgress<string>? fileProgress, CancellationToken ct, int count, string? physRootDir = null)
     {
         // Prevent writing outside the target directory (symbolic link / junction attack)
+        var rootDir = physRootDir ?? physDir;
         var fullPath = Path.GetFullPath(physDir);
-        var basePath = Path.GetFullPath(Path.GetDirectoryName(fullPath) ?? fullPath);
+        var basePath = Path.GetFullPath(rootDir);
         if (!fullPath.StartsWith(basePath, StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("Export path resolves outside target directory.", nameof(physDir));
+            throw new ArgumentException("Path traversal detected");
 
         Directory.CreateDirectory(physDir);
 
@@ -1108,7 +1109,7 @@ public class VaultService : IVaultService
             if (item.IsFolder)
             {
                 var subPhysDir = Path.Combine(physDir, item.Name);
-                count = await ExportDirectoryRecursiveAsync(item.VirtualPath, subPhysDir, fileProgress, ct, count);
+                count = await ExportDirectoryRecursiveAsync(item.VirtualPath, subPhysDir, fileProgress, ct, count, rootDir);
             }
             else
             {

@@ -31,6 +31,11 @@ public sealed partial class MainWindow : Window
     private Window? _previewWindow;
     private readonly List<IntegrityIssue> _integrityIssues = new();
 
+    // Clipboard state (copy/cut/paste)
+    private List<VaultFileItem>? _clipboardItems;
+    private bool _clipboardIsCut;
+    private bool _pendingAutoLock;
+
     // Navigation history (back/forward)
     private readonly List<string> _navHistory = new() { "/" };
     private int _navIndex = 0;
@@ -81,6 +86,9 @@ public sealed partial class MainWindow : Window
                 _vault.ClearKeys();
                 _theme.ClearKey();
                 _favorites.ClearKey();
+                _clipboardItems = null;
+                _clipboardIsCut = false;
+                FileList.HasClipboardItems = false;
                 _pw.Lock();
                 AuthOverlay.Visibility = Visibility.Visible;
                 VaultContent.Visibility = Visibility.Collapsed;
@@ -105,6 +113,9 @@ public sealed partial class MainWindow : Window
         FileList.PropertiesRequested += (_, item) => ShowFileProperties(item);
         FileList.NewFolderRequested += (_, _) => OnNewFolderCmd(null!, null!);
         FileList.RefreshRequested += (_, _) => RefreshList();
+        FileList.CopyRequested += OnCopyRequested;
+        FileList.CutRequested += OnCutRequested;
+        FileList.PasteRequested += OnPasteRequested;
         TitleBar.SearchChanged += q => FileList.Filter = q;
         TitleBar.FilterChanged += filter => FileList.SearchFilter = filter;
         TitleBar.RefreshRequested += (_, _) => RefreshList();
@@ -288,6 +299,16 @@ public sealed partial class MainWindow : Window
             RefreshList();
             e.Handled = true;
         }
+        else if (e.Key == Windows.System.VirtualKey.Delete)
+        {
+            var sel = FileList.SelectedItems;
+            if (sel.Count > 0)
+            {
+                try { _ = ExecuteBatchDelete(sel).ContinueWith(t => { if (t.IsFaulted) LogService.Error($"Delete failed: {t.Exception}"); }, TaskScheduler.Default); }
+                catch (Exception ex) { LogService.Error($"Delete failed: {ex}"); }
+            }
+            e.Handled = true;
+        }
         else if (e.Key == Windows.System.VirtualKey.Home)
         {
             FileList.FocusFirstItem();
@@ -434,10 +455,15 @@ public sealed partial class MainWindow : Window
     void OnAutoLockTick(object? sender, object e)
     {
         _autoLockTimer?.Stop();
-        if (_pw.IsLocked || _busy) { ResetAutoLockTimer(); return; }
+        if (_pw.IsLocked) { ResetAutoLockTimer(); return; }
+        // If busy, defer lock until operation completes (but don't reset timer)
+        if (_busy) { _pendingAutoLock = true; return; }
         _vault.ClearKeys();
         _theme.ClearKey();
         _favorites.ClearKey();
+        _clipboardItems = null;
+        _clipboardIsCut = false;
+        FileList.HasClipboardItems = false;
         _pw.Lock();
         StatusBar.SetLocked(true);
         AuthOverlay.Visibility = Visibility.Visible;
@@ -505,6 +531,9 @@ public sealed partial class MainWindow : Window
                             _vault.ClearKeys();
                             _theme.ClearKey();
                             _favorites.ClearKey();
+                            _clipboardItems = null;
+                            _clipboardIsCut = false;
+                            FileList.HasClipboardItems = false;
                             _pw.Lock();
                             AuthOverlay.Visibility = Visibility.Visible;
                             VaultContent.Visibility = Visibility.Collapsed;
@@ -757,7 +786,7 @@ public sealed partial class MainWindow : Window
         var c = new UnlockControl(_pw, _vault.IsInitialized ? _vault.GetConfig() : null);
         c.Unlocked += (_, r) =>
         {
-            var d = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".Gyroown", "auth");
+            var d = VaultService.AuthDir;
             var enc = File.ReadAllBytes(Path.Combine(d, ".gyrock"));
             var kp = _enc.DecryptVaultKeyPair(enc, r.UserKey!);
             _vault.Initialize(kp.PrivateKey, kp.PublicKey);
@@ -1258,7 +1287,7 @@ public sealed partial class MainWindow : Window
             ShowSuccessBanner(string.Format(Loc.Get("MainWindow", "BatchDone"), Loc.Get("MainWindow", "ImportFolder"), count));
         }
         catch (Exception ex) { LogService.Error($"Folder import failed: {ex}"); ShowErrorBanner(ex.Message); }
-        finally { _busy = false; HideProgress(); RefreshList(); }
+        finally { _busy = false; HideProgress(); RefreshList(); CheckPendingAutoLock(); }
     }
 
     async void OnExportCmd(object s, RoutedEventArgs e)
@@ -1331,7 +1360,7 @@ public sealed partial class MainWindow : Window
                 UpdateProgress((double)completedSize / totalSize, Loc.Format("MainWindow", "BatchProgressFile", i + 1, files.Count, files[i].Name));
             }
         }
-        finally { _busy = false; _batchCts?.Dispose(); _batchCts = null; HideProgress(); }
+        finally { _busy = false; _batchCts?.Dispose(); _batchCts = null; HideProgress(); CheckPendingAutoLock(); }
 
         await ReportBatchResult(Loc.Get("MainWindow", "Export"), items.Count, errors);
     }
@@ -1359,7 +1388,7 @@ public sealed partial class MainWindow : Window
                 try { await f.DeleteAsync(); } catch (Exception ex) { LogService.Debug($"MoveIn source delete failed for {f.Name}: {ex.Message}"); }
             }
         }
-        finally { _busy = false; HideProgress(); RefreshList(); }
+        finally { _busy = false; HideProgress(); RefreshList(); CheckPendingAutoLock(); }
     }
 
     async void OnMoveOutCmd(object s, RoutedEventArgs e)
@@ -1409,7 +1438,7 @@ public sealed partial class MainWindow : Window
                 catch (Exception ex) { errors.Add((files[i].Name, ex.Message)); }
             }
         }
-        finally { _busy = false; _batchCts?.Dispose(); _batchCts = null; HideProgress(); RefreshList(); }
+        finally { _busy = false; _batchCts?.Dispose(); _batchCts = null; HideProgress(); RefreshList(); CheckPendingAutoLock(); }
 
         await ReportBatchResult(Loc.Get("MainWindow", "MoveOut"), sel.Count, errors);
     }
@@ -1504,12 +1533,12 @@ public sealed partial class MainWindow : Window
             FileList.RemoveItems(items);
             RefreshList();
         }
-        finally { _busy = false; _batchCts?.Dispose(); _batchCts = null; HideProgress(); }
+        finally { _busy = false; _batchCts?.Dispose(); _batchCts = null; HideProgress(); CheckPendingAutoLock(); }
 
         await ReportBatchResult(Loc.Get("MainWindow", "Delete"), items.Count, errors);
     }
 
-    async void OnLockCmd(object s, RoutedEventArgs e) { if (_busy) return; _busy = true; try { _vault.ClearKeys(); _theme.ClearKey(); _favorites.ClearKey(); _pw.Lock(); StatusBar.SetLocked(true); AuthOverlay.Visibility = Visibility.Visible; VaultContent.Visibility = Visibility.Collapsed; ShowUnlock(); } finally { _busy = false; } }
+    void OnLockCmd(object s, RoutedEventArgs e) { if (_busy) return; _busy = true; try { _vault.ClearKeys(); _theme.ClearKey(); _favorites.ClearKey(); _clipboardItems = null; _clipboardIsCut = false; FileList.HasClipboardItems = false; _pw.Lock(); StatusBar.SetLocked(true); AuthOverlay.Visibility = Visibility.Visible; VaultContent.Visibility = Visibility.Collapsed; ShowUnlock(); } finally { _busy = false; } }
 
     async void OnNewFolderCmd(object s, RoutedEventArgs e)
     {
@@ -1644,7 +1673,115 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) { LogService.Error($"Inline rename failed: {ex}"); }
     }
 
+    // ── Clipboard (copy/cut/paste) ──
+    void OnCopyRequested(object? sender, IReadOnlyList<VaultFileItem> items)
+    {
+        _clipboardItems = items.ToList();
+        _clipboardIsCut = false;
+        FileList.HasClipboardItems = true;
+        ShowSuccessBanner(string.Format(Loc.Get("FileList", "BatchCopy"), items.Count));
+    }
 
+    void OnCutRequested(object? sender, IReadOnlyList<VaultFileItem> items)
+    {
+        _clipboardItems = items.ToList();
+        _clipboardIsCut = true;
+        FileList.HasClipboardItems = true;
+        ShowSuccessBanner(string.Format(Loc.Get("FileList", "BatchCut"), items.Count));
+    }
+
+    async void OnPasteRequested(object? sender, EventArgs e)
+    {
+        if (_clipboardItems == null || _clipboardItems.Count == 0) return;
+        if (_busy) return;
+
+        _busy = true;
+        var cts = new CancellationTokenSource();
+        try
+        {
+            var errors = new List<(string Name, string Error)>();
+            var targetPath = _vault.CurrentPath;
+            var sourceItems = _clipboardItems.ToList();
+
+            ShowProgress(Loc.Get("FileList", "Paste"), Loc.Format("MainWindow", "BatchProgress", 0, sourceItems.Count), true);
+            _batchCts = cts;
+
+            for (int i = 0; i < sourceItems.Count; i++)
+            {
+                if (cts.Token.IsCancellationRequested) break;
+                var item = sourceItems[i];
+                try
+                {
+                    UpdateProgress((double)i / sourceItems.Count,
+                        Loc.Format("MainWindow", "BatchProgressFile", i + 1, sourceItems.Count, item.Name));
+
+                    if (_clipboardIsCut)
+                    {
+                        // Cut = Move metadata to target path
+                        _vault.MoveItem(item.Id, targetPath);
+                    }
+                    else
+                    {
+                        // Copy = Export decrypted data, then re-import as new file
+                        // Auto-rename if source and target are in the same folder
+                        var copyName = item.Name;
+                        if (item.VirtualPath == targetPath)
+                        {
+                            var nameWithoutExt = Path.GetFileNameWithoutExtension(copyName);
+                            var ext = Path.GetExtension(copyName);
+                            var counter = 1;
+                            var existingItems = _vault.ListItems(targetPath);
+                            while (existingItems.Any(i => i.Name == copyName))
+                            {
+                                copyName = $"{nameWithoutExt} - Copy ({counter}){ext}";
+                                counter++;
+                            }
+                        }
+                        using var ms = new MemoryStream();
+                        await _vault.ExportItemAsync(item.Id, ms, null, cts.Token);
+                        ms.Position = 0;
+                        await _vault.ImportItemAsync(ms, copyName, targetPath, null, cts.Token);
+                    }
+                }
+                catch (Exception ex) { errors.Add((item.Name, ex.Message)); LogService.Error($"Paste failed for {item.Name}: {ex}"); }
+            }
+
+            // Clear clipboard only when all items succeeded and it was a cut operation
+            if (errors.Count == 0 && _clipboardIsCut)
+            {
+                _clipboardItems = null;
+                _clipboardIsCut = false;
+                FileList.HasClipboardItems = false;
+            }
+
+            RefreshList();
+
+            if (errors.Count > 0)
+                await ReportBatchResult(Loc.Get("FileList", "Paste"), sourceItems.Count, errors);
+            else
+                ShowSuccessBanner(Loc.Format("MainWindow", "BatchDone", Loc.Get("FileList", "Paste"), sourceItems.Count));
+        }
+        finally { _busy = false; _batchCts?.Dispose(); _batchCts = null; HideProgress(); CheckPendingAutoLock(); }
+    }
+
+    void CheckPendingAutoLock()
+    {
+        if (_pendingAutoLock && !_busy && !_pw.IsLocked)
+        {
+            _pendingAutoLock = false;
+            _vault.ClearKeys();
+            _theme.ClearKey();
+            _favorites.ClearKey();
+            _clipboardItems = null;
+            _clipboardIsCut = false;
+            FileList.HasClipboardItems = false;
+            _pw.Lock();
+            StatusBar.SetLocked(true);
+            AuthOverlay.Visibility = Visibility.Visible;
+            VaultContent.Visibility = Visibility.Collapsed;
+            ShowUnlock();
+        }
+    }
 
     // Progress
     void ShowProgress(string title, string detail, bool cancellable = false)
@@ -1948,7 +2085,7 @@ public sealed partial class MainWindow : Window
         try
         {
             var (oldUk, newUk) = await _pw.ChangePasswordAsync(result.Value.Old, result.Value.New);
-            var authDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".Gyroown", "auth");
+            var authDir = VaultService.AuthDir;
             var vkPath = Path.Combine(authDir, ".gyrock");
             var enc = File.ReadAllBytes(vkPath);
             var kp = _enc.DecryptVaultKeyPair(enc, oldUk);
